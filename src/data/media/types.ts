@@ -24,6 +24,13 @@ export type ImportedMedia = NewMedia & {
 
 export const MEDIA_ROOTS = ['media', 'thumbs'] as const;
 
+const MEDIA_KEY_RE = /^(media|thumbs)\/[0-9a-f]{2}\/[0-9a-f]{64}\.jpg$/;
+
+/** Reject path traversal or unexpected keys before touching the filesystem / KV store. */
+export function assertSafeMediaKey(key: string): void {
+  if (!MEDIA_KEY_RE.test(key)) throw new Error(`unsafe media key: ${key}`);
+}
+
 export function mediaPaths(sha256: string) {
   const prefix = sha256.slice(0, 2);
   return {

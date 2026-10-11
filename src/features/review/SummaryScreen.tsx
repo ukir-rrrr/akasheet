@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,8 +10,9 @@ import { formatDateTime, formatShortDate } from '@/ui/format';
 import { AppText, Button, PressableScale } from '@/ui/primitives';
 import { heights, radius, useTheme } from '@/ui/theme';
 
-import { ALL_FOLDERS } from './ReviewScreen';
-import { sessionResult } from './sessionResult';
+import { ALL_FOLDERS } from './constants';
+import { sessionResult, type SessionResult } from './sessionResult';
+import { SM2B } from '@/domain/scheduler/sm2b';
 
 function AgainThumb({ cardId, onOpen }: { cardId: string; onOpen: () => void }) {
   const { c } = useTheme();
@@ -66,9 +67,16 @@ export function SummaryScreen() {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const today = useToday();
-  const [result] = useState(() => sessionResult.peek());
+  const [result, setResult] = useState<SessionResult | null>(null);
   const nextDue = useNextDue(result?.folderId ?? null);
   const [zoomId, setZoomId] = useState<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      const taken = sessionResult.take();
+      if (taken) setResult(taken);
+    }, []),
+  );
 
   const backToFolder = () => {
     // The summary replaced the review modal, so the screen that started the review is right underneath.
@@ -184,7 +192,7 @@ export function SummaryScreen() {
           )}
           {result.pendingIn === null && again > 0 && (
             <AppText variant="sub" color={c.ink2} style={{ marginTop: 4 }}>
-              まだの{again}枚は 10 分後に戻ってきます
+              まだの{again}枚は {Math.max(1, Math.round(SM2B.AGAIN_DELAY_MS / 60_000))} 分後に戻ってきます
             </AppText>
           )}
         </View>

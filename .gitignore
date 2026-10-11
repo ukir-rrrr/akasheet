@@ -57,6 +57,7 @@ service-account*.json
 .secrets/
 
 # Scratch / local-only material (never published)
+.thermos/
 uploads/
 scratch/
 arena/

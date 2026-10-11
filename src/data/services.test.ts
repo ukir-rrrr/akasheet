@@ -98,7 +98,9 @@ describe('mediaStore', () => {
     expect(m.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect([...files.keys()].sort()).toEqual([m.path, m.thumbPath].sort());
     expect(await store.resolveMediaUri(m.path)).toBe(`mem://${m.path}`);
-    await expect(store.resolveMediaUri('media/zz/none.jpg')).rejects.toBeInstanceOf(MissingAssetError);
+    await expect(store.resolveMediaUri('media/zz/none.jpg')).rejects.toThrow('unsafe media key');
+    const missing = `media/00/${'0'.repeat(64)}.jpg`;
+    await expect(store.resolveMediaUri(missing)).rejects.toBeInstanceOf(MissingAssetError);
 
     const again = await store.persistImage(await store.prepareImage('pick://a'));
     expect(again).toMatchObject({ sha256: m.sha256, fresh: false });
@@ -151,7 +153,7 @@ describe('runMaintenance', () => {
       { cards, store },
       { folderId, image: await store.prepareImage('pick://b'), masks: [rect], source: 'library' },
     );
-    files.set('media/zz/orphan.jpg', new Uint8Array(1));
+    files.set(`media/aa/${'c'.repeat(64)}.jpg`, new Uint8Array(1));
     await cards.remove([drop]);
 
     expect(await runMaintenance({ media, store, clock })).toEqual({ purged: 0, removedFiles: 1 });

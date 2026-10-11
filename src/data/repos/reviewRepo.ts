@@ -3,6 +3,7 @@ import { reviewRng } from '@/domain/scheduler/rng';
 import type { Phase, Rating, ReviewState, Scheduler } from '@/domain/scheduler/types';
 import { ValidationError } from '@/shared/errors';
 
+import { chunk, SQLITE_IN_CHUNK } from '../db/sql';
 import type { SqlDriver } from '../db/driver';
 import type { RepoContext } from './context';
 
@@ -119,13 +120,17 @@ export function createReviewRepo(ctx: RepoContext) {
     /** Live cards among `cardIds` (in that order) as queue items, for 「まだを もう一度」. */
     async queueFor(cardIds: readonly string[]): Promise<QueueItem[]> {
       if (cardIds.length === 0) return [];
-      const rows = await db.all<{ id: string; phase: Phase; due_at: number }>(
-        `SELECT c.id, rs.phase, rs.due_at
-         FROM cards c JOIN review_states rs ON rs.card_id = c.id
-         JOIN folders f ON f.id = c.folder_id AND f.deleted_at IS NULL
-         WHERE c.deleted_at IS NULL AND c.id IN (${cardIds.map(() => '?').join(', ')})`,
-        [...cardIds],
-      );
+      const rows: { id: string; phase: Phase; due_at: number }[] = [];
+      for (const part of chunk(cardIds, SQLITE_IN_CHUNK)) {
+        const batch = await db.all<{ id: string; phase: Phase; due_at: number }>(
+          `SELECT c.id, rs.phase, rs.due_at
+           FROM cards c JOIN review_states rs ON rs.card_id = c.id
+           JOIN folders f ON f.id = c.folder_id AND f.deleted_at IS NULL
+           WHERE c.deleted_at IS NULL AND c.id IN (${part.map(() => '?').join(', ')})`,
+          [...part],
+        );
+        rows.push(...batch);
+      }
       const byId = new Map(rows.map((r) => [r.id, { cardId: r.id, phase: r.phase, dueAt: r.due_at }]));
       return cardIds.flatMap((id) => byId.get(id) ?? []);
     },
@@ -146,6 +151,13 @@ export function createReviewRepo(ctx: RepoContext) {
       const tz = ctx.timeZone();
       const logId = ctx.newId();
       return db.transaction(async (tx) => {
+        const live = await tx.get<{ id: string }>(
+          `SELECT c.id FROM cards c
+           JOIN folders f ON f.id = c.folder_id AND f.deleted_at IS NULL
+           WHERE c.id = ? AND c.deleted_at IS NULL`,
+          [input.cardId],
+        );
+        if (!live) throw new ValidationError('カードが見つかりません');
         const prev = await readState(tx, input.cardId);
         const next = scheduler.next(prev, input.rating, { now, tz, rng: reviewRng(input.cardId, now) });
         await tx.run(

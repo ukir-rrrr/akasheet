@@ -111,8 +111,8 @@ test('create a folder and a masked card, then review it', async ({ page }) => {
   await expect(page.getByTestId('review-wrapping-up')).toBeVisible();
   await shot('answered-good');
 
-  // The summary opens once the 5-second undo window of the final answer has passed.
-  await expect(page.getByTestId('summary-title')).toHaveText('おつかれさまでした', { timeout: 15_000 });
+  await page.getByTestId('see-summary').click();
+  await expect(page.getByTestId('summary-title')).toHaveText('おつかれさまでした');
   await expect(page.getByTestId('summary-remembered')).toHaveText('1');
   await shot('summary');
 

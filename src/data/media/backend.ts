@@ -5,7 +5,7 @@ import { StorageError } from '@/shared/errors';
 
 import { encodeJpeg } from './encodeJpeg';
 import type { MediaBackend } from './store';
-import { MEDIA_ROOTS, toHex } from './types';
+import { assertSafeMediaKey, MEDIA_ROOTS, toHex } from './types';
 
 /** Native: files under documentDirectory (iOS changes the container path between installs, keys stay relative). */
 function listFiles(dir: Directory, prefix: string, out: string[]) {
@@ -22,6 +22,7 @@ export const platformBackend: MediaBackend = {
   readBytes: (uri) => new File(uri).bytes(),
   sha256: async (bytes) => toHex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes)),
   async putIfAbsent(key, srcUri) {
+    assertSafeMediaKey(key);
     const dest = new File(Paths.document, key);
     if (dest.exists) return false;
     const dir = dest.parentDirectory;
@@ -30,6 +31,7 @@ export const platformBackend: MediaBackend = {
     return true;
   },
   async remove(key) {
+    assertSafeMediaKey(key);
     const f = new File(Paths.document, key);
     if (f.exists) f.delete();
   },
@@ -39,6 +41,7 @@ export const platformBackend: MediaBackend = {
     return out;
   },
   async uriFor(key) {
+    assertSafeMediaKey(key);
     const f = new File(Paths.document, key);
     return f.exists ? f.uri : null;
   },

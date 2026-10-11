@@ -23,9 +23,6 @@ import { useReviewSession, type CardView } from './useReviewSession';
 
 const UNDO_WINDOW_MS = 5000;
 
-/** Route segment for reviewing every folder at once (`/review/all`). */
-export const ALL_FOLDERS = 'all';
-
 /** `folderId` null = all folders; `onlyCardIds` = 「まだを もう一度」. */
 export function ReviewScreen({
   folderId,
@@ -46,6 +43,7 @@ export function ReviewScreen({
 
   const close = () => goBackOr('/');
   const finish = () => {
+    r.clearLast();
     sessionResult.set(r.result(folderName));
     router.replace('/review/summary');
   };

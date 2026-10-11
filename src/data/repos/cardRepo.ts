@@ -6,7 +6,8 @@ import type { Phase } from '@/domain/scheduler/types';
 import { ValidationError } from '@/shared/errors';
 
 import type { SqlDriver } from '../db/driver';
-import type { NewMedia } from '../media/types';
+import { chunk, SQLITE_IN_CHUNK } from '../db/sql';
+import { assertSafeMediaKey, type NewMedia } from '../media/types';
 import type { RepoContext } from './context';
 import { upsertMedia } from './mediaRepo';
 import { insertInitialState } from './reviewRepo';
@@ -110,6 +111,12 @@ function validateInput(input: NewCard) {
   // The iOS container path changes between installs, so only document-relative paths may be stored.
   if ([path, thumbPath].some((p) => p.length === 0 || /^([a-z]+:|\/)/i.test(p))) {
     throw new ValidationError('画像のパスは相対パスで保存します');
+  }
+  try {
+    assertSafeMediaKey(path);
+    assertSafeMediaKey(thumbPath);
+  } catch {
+    throw new ValidationError('画像のパスが不正です');
   }
   if (!(width > 0 && height > 0)) throw new ValidationError('画像の寸法が不正です');
 }
@@ -224,16 +231,18 @@ export function createCardRepo(ctx: RepoContext) {
     async remove(cardIds: readonly string[]): Promise<void> {
       if (cardIds.length === 0) return;
       const now = clock.now();
-      const ids = placeholders(cardIds);
       await db.transaction(async (tx) => {
-        await tx.run(
-          `UPDATE masks SET deleted_at = ?, updated_at = ? WHERE card_id IN (${ids}) AND deleted_at IS NULL`,
-          [now, now, ...cardIds],
-        );
-        await tx.run(
-          `UPDATE cards SET deleted_at = ?, updated_at = ? WHERE id IN (${ids}) AND deleted_at IS NULL`,
-          [now, now, ...cardIds],
-        );
+        for (const part of chunk(cardIds, SQLITE_IN_CHUNK)) {
+          const ids = placeholders(part);
+          await tx.run(
+            `UPDATE masks SET deleted_at = ?, updated_at = ? WHERE card_id IN (${ids}) AND deleted_at IS NULL`,
+            [now, now, ...part],
+          );
+          await tx.run(
+            `UPDATE cards SET deleted_at = ?, updated_at = ? WHERE id IN (${ids}) AND deleted_at IS NULL`,
+            [now, now, ...part],
+          );
+        }
       });
     },
 
@@ -242,10 +251,12 @@ export function createCardRepo(ctx: RepoContext) {
       const now = clock.now();
       await db.transaction(async (tx) => {
         await liveFolder(tx, folderId);
-        await tx.run(
-          `UPDATE cards SET folder_id = ?, updated_at = ? WHERE id IN (${placeholders(cardIds)}) AND deleted_at IS NULL`,
-          [folderId, now, ...cardIds],
-        );
+        for (const part of chunk(cardIds, SQLITE_IN_CHUNK)) {
+          await tx.run(
+            `UPDATE cards SET folder_id = ?, updated_at = ? WHERE id IN (${placeholders(part)}) AND deleted_at IS NULL`,
+            [folderId, now, ...part],
+          );
+        }
       });
     },
   };

@@ -8,6 +8,7 @@ import {
   THUMB_QUALITY,
   type ImportedMedia,
   type PreparedImage,
+  assertSafeMediaKey,
 } from './types';
 
 /** The platform-specific half of media storage. Keys are document-relative paths (`media/ab/<sha>.jpg`). */
@@ -59,11 +60,14 @@ export function createMediaStore(backend: MediaBackend) {
     /** Compensation for a failed DB save: removes files only if this save created them. */
     async discardPersisted(m: ImportedMedia): Promise<void> {
       if (!m.fresh) return;
+      assertSafeMediaKey(m.path);
+      assertSafeMediaKey(m.thumbPath);
       await backend.remove(m.path);
       await backend.remove(m.thumbPath);
     },
 
     async resolveMediaUri(key: string): Promise<string> {
+      assertSafeMediaKey(key);
       const uri = await backend.uriFor(key);
       if (uri === null) throw new MissingAssetError(`画像が見つかりません: ${key}`);
       return uri;
@@ -74,6 +78,11 @@ export function createMediaStore(backend: MediaBackend) {
       let removed = 0;
       for (const key of await backend.keys()) {
         if (livePaths.has(key)) continue;
+        try {
+          assertSafeMediaKey(key);
+        } catch {
+          continue;
+        }
         await backend.remove(key);
         removed++;
       }
