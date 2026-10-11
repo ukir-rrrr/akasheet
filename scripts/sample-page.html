@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Source for assets/sample/textbook.jpg (regenerate with `node scripts/render-sample.js`). Original text. -->
+    <style>
+      body {
+        margin: 0;
+        background: #fbf8f1;
+      }
+      .page {
+        width: 1100px;
+        height: 1460px;
+        padding: 70px 80px;
+        box-sizing: border-box;
+        font-family: 'Noto Serif CJK JP', serif;
+        color: #222;
+        position: relative;
+      }
+      .chapter {
+        font-family: 'Noto Sans CJK JP', sans-serif;
+        font-size: 22px;
+        color: #555;
+        border-bottom: 2px solid #2d5b8c;
+        padding-bottom: 8px;
+        display: flex;
+        justify-content: space-between;
+      }
+      h1 {
+        font-size: 46px;
+        margin: 36px 0 26px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      h1 .num {
+        background: #2d5b8c;
+        color: #fff;
+        font-family: 'Noto Sans CJK JP', sans-serif;
+        font-size: 34px;
+        width: 54px;
+        height: 54px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      h2 {
+        font-family: 'Noto Sans CJK JP', sans-serif;
+        font-size: 30px;
+        color: #2d5b8c;
+        margin: 36px 0 14px;
+      }
+      h2::before {
+        content: '■ ';
+      }
+      p {
+        font-size: 29px;
+        line-height: 1.95;
+        margin: 0;
+        text-indent: 1em;
+        text-align: justify;
+      }
+      .fig {
+        margin-top: 40px;
+        border: 2px solid #9ab;
+        padding: 24px 30px;
+        background: #f1f5f8;
+        font-family: 'Noto Sans CJK JP', sans-serif;
+      }
+      .fig .cap {
+        font-size: 22px;
+        color: #2d5b8c;
+        margin-bottom: 18px;
+      }
+      .chart {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 18px 28px;
+        font-size: 24px;
+        text-align: center;
+      }
+      .box {
+        border: 2px solid #557;
+        background: #fff;
+        padding: 10px 6px;
+      }
+      .top {
+        grid-column: 2;
+      }
+      .foot {
+        position: absolute;
+        bottom: 40px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 20px;
+        color: #777;
+        font-family: 'Noto Sans CJK JP', sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="chapter"><span>第2章 中世社会の成立</span><span>サンプル教材</span></div>
+      <h1><span class="num">2</span>鎌倉幕府の成立</h1>
+      <p>
+        1180年、伊豆に流されていた源頼朝は平氏を倒すために兵を挙げ、相模の鎌倉を根拠地として東国の武士をまとめた。1185年、頼朝は国ごとに守護を、荘園や公領ごとに地頭を置くことを朝廷に認めさせ、全国に支配を広げる足がかりを得た。
+      </p>
+      <p>
+        将軍と主従関係を結んだ武士は御家人とよばれた。将軍は御家人の領地を保障したり新しい領地を与えたりする御恩を施し、御家人は戦いのときに軍役を務める奉公でこたえた。
+      </p>
+      <h2>執権政治</h2>
+      <p>
+        頼朝の死後、北条氏が執権として幕府の実権をにぎった。1221年の承久の乱で朝廷方を破ると、幕府は京都に六波羅探題を置いて朝廷を監視した。1232年、執権北条泰時は武士の裁判の基準として御成敗式目を定めた。
+      </p>
+      <div class="fig">
+        <div class="cap">図 鎌倉幕府のしくみ</div>
+        <div class="chart">
+          <div class="box top">将軍</div>
+          <div></div>
+          <div class="box top" style="grid-column: 2">執権</div>
+          <div></div>
+          <div class="box">侍所</div>
+          <div class="box">政所</div>
+          <div class="box">問注所</div>
+          <div class="box">六波羅探題</div>
+          <div class="box">守護</div>
+          <div class="box">地頭</div>
+        </div>
+      </div>
+      <div class="foot">— 48 —</div>
+    </div>
+  </body>
+</html>
