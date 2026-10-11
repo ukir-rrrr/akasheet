@@ -10,3 +10,4 @@ package-lock.json
 assets/expo.icon
 e2e-artifacts
 assets/sample/textbook.svg
+.github/workflows/pullfrog.yml
