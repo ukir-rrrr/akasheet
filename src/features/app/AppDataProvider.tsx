@@ -66,7 +66,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [state]);
 
   if (state.error) {
-    const diag = `めくる DB error\nplatform=${Platform.OS}\n${errorMessage(state.error)}`;
+    const diag = `akasheet DB error\nplatform=${Platform.OS}\n${errorMessage(state.error)}`;
     return (
       <View style={[styles.center, { backgroundColor: c.bg }]} accessibilityRole="alert">
         <Icon name="warning-outline" size={36} color={c.warn} />

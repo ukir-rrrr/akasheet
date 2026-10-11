@@ -1,52 +1,86 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# Dependencies
 node_modules/
+.pnp.*
+.yarn/*
+!.yarn/releases
 
-# Expo
+# Expo / Metro / build output
 .expo/
+.expo-shared/
 dist/
 web-build/
+build/
 expo-env.d.ts
-
-# Native
-.kotlin/
-*.orig.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-
-# Metro
 .metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
-.DS_Store
-*.pem
-
-# local env files
-.env*.local
-
-# typescript
 *.tsbuildinfo
+public/canvaskit.wasm
 
-example
-
-# generated native folders
+# Generated native projects (Continuous Native Generation)
 /ios
 /android
+.kotlin/
+*.orig.*
 
-# e2e / coverage
+# Tests, coverage and recordings
 coverage/
 test-results/
 playwright-report/
+blob-report/
+playwright/.cache/
+e2e-artifacts/
+*.webm
+*.mp4
+*.mov
+*.trace.zip
+/screenshots/
+/recordings/
+
+# Secrets and signing material
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+*.cer
+*.certSigningRequest
+google-services.json
+GoogleService-Info.plist
+credentials.json
+service-account*.json
+.npmrc
+.secrets/
+
+# Scratch / local-only material (never published)
 uploads/
+scratch/
+arena/
+tmp/
 agent-tools/
 terminals/
-public/canvaskit.wasm
+example/
+
+# Logs
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+pnpm-debug.*
+
+# OS / editor junk
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.swp
+*~
+.idea/

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "めくる",
-    "slug": "mekuru",
+    "name": "akasheet",
+    "slug": "akasheet",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
-    "scheme": "mekuru",
+    "scheme": "akasheet",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",

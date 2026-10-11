@@ -13,7 +13,7 @@ import type { SqlDriver } from './driver';
 import { createExpoDriver } from './expoDriver';
 import { migrate } from './migrate';
 
-export const DB_NAME = 'mekuru.db';
+export const DB_NAME = 'akasheet.db';
 
 export type AppData = {
   db: SqlDriver;

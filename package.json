@@ -1,5 +1,5 @@
 {
-  "name": "mekuru",
+  "name": "akasheet",
   "main": "index",
   "version": "1.0.0",
   "dependencies": {
@@ -58,15 +58,18 @@
     "ios": "expo start --ios",
     "web": "expo start --web --port 8765",
     "lint": "eslint . --max-warnings=0",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p e2e",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test:coverage",
+    "verify": "npm run secrets && npm run typecheck && npm run lint && npm run format:check && npm run test:coverage",
     "e2e": "playwright test",
     "prepare": "husky",
-    "postinstall": "node scripts/copy-canvaskit.js"
+    "postinstall": "node scripts/copy-canvaskit.js",
+    "sample": "node scripts/render-sample.js",
+    "secrets": "node scripts/secret-scan.js --self-test && node scripts/secret-scan.js"
   },
-  "private": true
+  "private": true,
+  "license": "MIT"
 }
