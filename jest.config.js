@@ -12,8 +12,11 @@ module.exports = {
     '!src/data/db/expoDriver.ts',
     '!src/data/db/client.ts',
     '!src/data/media/**',
+    'src/data/media/store.ts',
+    'src/data/media/types.ts',
   ],
   coverageThreshold: {
+    './src/data/': { lines: 90, branches: 80, functions: 90, statements: 90 },
     './src/domain/scheduler/': { lines: 95, branches: 90, functions: 95, statements: 95 },
     './src/domain/mask/': { lines: 90, branches: 85, functions: 90, statements: 90 },
     './src/domain/review/': { lines: 90, branches: 85, functions: 90, statements: 90 },

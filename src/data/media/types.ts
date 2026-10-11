@@ -1,9 +1,18 @@
-import type { NewMedia } from '../repos/cardRepo';
-
 export const MAX_LONG_SIDE = 2048;
 export const THUMB_LONG_SIDE = 512;
 export const JPEG_QUALITY = 0.85;
 export const THUMB_QUALITY = 0.7;
+
+/** Content-addressed media metadata as stored in the `media` table. */
+export type NewMedia = {
+  sha256: string;
+  path: string;
+  thumbPath: string;
+  mime: string;
+  width: number;
+  height: number;
+  byteSize: number;
+};
 
 /** EXIF-baked, resized image waiting in temporary storage; its size is the mask coordinate space. */
 export type PreparedImage = { uri: string; width: number; height: number };
@@ -13,9 +22,14 @@ export type ImportedMedia = NewMedia & {
   fresh: boolean;
 };
 
+export const MEDIA_ROOTS = ['media', 'thumbs'] as const;
+
 export function mediaPaths(sha256: string) {
   const prefix = sha256.slice(0, 2);
-  return { path: `media/${prefix}/${sha256}.jpg`, thumbPath: `thumbs/${prefix}/${sha256}.jpg` };
+  return {
+    path: `${MEDIA_ROOTS[0]}/${prefix}/${sha256}.jpg`,
+    thumbPath: `${MEDIA_ROOTS[1]}/${prefix}/${sha256}.jpg`,
+  };
 }
 
 export function toHex(buf: ArrayBuffer): string {

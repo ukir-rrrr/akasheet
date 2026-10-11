@@ -2,25 +2,35 @@ import { Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { openDatabaseAsync } from 'expo-sqlite';
 
-import { createCardRepo } from '@/data/repos/cardRepo';
-import type { RepoContext } from '@/data/repos/context';
-import { createFolderRepo } from '@/data/repos/folderRepo';
-import { createReviewRepo } from '@/data/repos/reviewRepo';
-import { deviceTimeZone, systemClock } from '@/shared/clock';
+import { sm2b } from '@/domain/scheduler/sm2b';
+import { deviceTimeZone, systemClock, type Clock } from '@/shared/clock';
 import { createIdGenerator } from '@/shared/id';
 
-import type { SqlDriver } from './driver';
+import { mediaStore } from '../media/mediaStore';
+import type { MediaStore } from '../media/store';
+import { createCardRepo, type CardRepo } from '../repos/cardRepo';
+import type { RepoContext } from '../repos/context';
+import { createFolderRepo, type FolderRepo } from '../repos/folderRepo';
+import { createMediaRepo } from '../repos/mediaRepo';
+import { createMetaRepo, type MetaRepo } from '../repos/metaRepo';
+import { createReviewRepo, type ReviewRepo } from '../repos/reviewRepo';
+import { runMaintenance, saveCard, type SaveCardInput } from '../services';
 import { createExpoDriver } from './expoDriver';
 import { migrate } from './migrate';
 
 export const DB_NAME = 'akasheet.db';
 
+/** Everything the UI may use. The SQL driver and repo context stay inside the data layer. */
 export type AppData = {
-  db: SqlDriver;
-  ctx: RepoContext;
-  folders: ReturnType<typeof createFolderRepo>;
-  cards: ReturnType<typeof createCardRepo>;
-  reviews: ReturnType<typeof createReviewRepo>;
+  clock: Clock;
+  timeZone: () => string;
+  folders: FolderRepo;
+  cards: CardRepo;
+  reviews: ReviewRepo;
+  meta: MetaRepo;
+  images: Pick<MediaStore, 'prepareImage' | 'resolveMediaUri'>;
+  saveCard(input: SaveCardInput): Promise<string>;
+  runMaintenance(): Promise<{ purged: number; removedFiles: number }>;
 };
 
 async function backupDatabase(path: string, fromVersion: number) {
@@ -34,14 +44,6 @@ async function backupDatabase(path: string, fromVersion: number) {
   await src.copy(dest);
 }
 
-async function loadDeviceId(db: SqlDriver, newId: () => string): Promise<string> {
-  const row = await db.get<{ value: string }>("SELECT value FROM app_meta WHERE key = 'device_id'");
-  if (row) return row.value;
-  const id = newId();
-  await db.run("INSERT INTO app_meta (key, value) VALUES ('device_id', ?)", [id]);
-  return id;
-}
-
 /** The only place that opens the database (foreign_keys is per-connection). */
 export async function openAppData(): Promise<AppData> {
   const raw = await openDatabaseAsync(DB_NAME);
@@ -51,18 +53,26 @@ export async function openAppData(): Promise<AppData> {
   const db = createExpoDriver(raw);
   await migrate(db, { beforeMigrate: (v) => backupDatabase(raw.databasePath, v) });
   const newId = createIdGenerator(systemClock, (n) => Crypto.getRandomBytes(n));
+  const meta = createMetaRepo(db);
   const ctx: RepoContext = {
     db,
     clock: systemClock,
     newId,
-    deviceId: await loadDeviceId(db, newId),
+    deviceId: await meta.ensureDeviceId(newId),
     timeZone: deviceTimeZone,
+    scheduler: sm2b,
   };
+  const cards = createCardRepo(ctx);
+  const media = createMediaRepo(ctx);
   return {
-    db,
-    ctx,
+    clock: ctx.clock,
+    timeZone: ctx.timeZone,
     folders: createFolderRepo(ctx),
-    cards: createCardRepo(ctx),
+    cards,
     reviews: createReviewRepo(ctx),
+    meta,
+    images: mediaStore,
+    saveCard: (input) => saveCard({ cards, store: mediaStore }, input),
+    runMaintenance: () => runMaintenance({ media, store: mediaStore, clock: ctx.clock }),
   };
 }

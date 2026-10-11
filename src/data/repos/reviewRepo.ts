@@ -1,6 +1,5 @@
 import type { QueueItem } from '@/domain/review/session';
 import { reviewRng } from '@/domain/scheduler/rng';
-import { sm2b } from '@/domain/scheduler/sm2b';
 import type { Phase, Rating, ReviewState, Scheduler } from '@/domain/scheduler/types';
 import { ValidationError } from '@/shared/errors';
 
@@ -41,8 +40,34 @@ export type AnswerInput = {
 
 export type AnswerResult = { logId: string; prev: ReviewState; next: ReviewState };
 
-export function createReviewRepo(ctx: RepoContext, scheduler: Scheduler = sm2b) {
-  const { db, clock } = ctx;
+const STATE_SET =
+  'phase = ?, due_at = ?, interval_days = ?, ease = ?, reps = ?, lapses = ?, last_reviewed_at = ?';
+
+function stateParams(s: ReviewState): (string | number | null)[] {
+  return [s.phase, s.dueAt, s.intervalDays, s.ease, s.reps, s.lapses, s.lastReviewedAt];
+}
+
+/** Initial review state of a freshly created card (inside the card-creation transaction). */
+export async function insertInitialState(tx: SqlDriver, scheduler: Scheduler, cardId: string, now: number) {
+  const s = scheduler.initial(now);
+  await tx.run(
+    `INSERT INTO review_states (card_id, algorithm, phase, due_at, interval_days, ease, reps, lapses, last_reviewed_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [cardId, scheduler.id, ...stateParams(s), now],
+  );
+}
+
+async function writeState(tx: SqlDriver, scheduler: Scheduler, cardId: string, s: ReviewState, now: number) {
+  await tx.run(`UPDATE review_states SET algorithm = ?, ${STATE_SET}, updated_at = ? WHERE card_id = ?`, [
+    scheduler.id,
+    ...stateParams(s),
+    now,
+    cardId,
+  ]);
+}
+
+export function createReviewRepo(ctx: RepoContext) {
+  const { db, clock, scheduler } = ctx;
 
   async function readState(tx: SqlDriver, cardId: string): Promise<ReviewState> {
     const r = await tx.get<StateRow>(`SELECT ${STATE_COLS} FROM review_states WHERE card_id = ?`, [cardId]);
@@ -91,12 +116,28 @@ export function createReviewRepo(ctx: RepoContext, scheduler: Scheduler = sm2b) 
       return readState(db, cardId);
     },
 
-    /** Preview of the next state for each rating (for button captions). */
+    /** Live cards among `cardIds` (in that order) as queue items, for 「まだを もう一度」. */
+    async queueFor(cardIds: readonly string[]): Promise<QueueItem[]> {
+      if (cardIds.length === 0) return [];
+      const rows = await db.all<{ id: string; phase: Phase; due_at: number }>(
+        `SELECT c.id, rs.phase, rs.due_at
+         FROM cards c JOIN review_states rs ON rs.card_id = c.id
+         JOIN folders f ON f.id = c.folder_id AND f.deleted_at IS NULL
+         WHERE c.deleted_at IS NULL AND c.id IN (${cardIds.map(() => '?').join(', ')})`,
+        [...cardIds],
+      );
+      const byId = new Map(rows.map((r) => [r.id, { cardId: r.id, phase: r.phase, dueAt: r.due_at }]));
+      return cardIds.flatMap((id) => byId.get(id) ?? []);
+    },
+
+    /**
+     * Next state per rating for the button captions, without fuzz: fuzz is seeded by the answer time
+     * (DESIGN §6.4), so the exact value is only known once answered. Captions mark fuzzed intervals as 「約」.
+     */
     async preview(cardId: string): Promise<Record<Rating, ReviewState>> {
       const s = await readState(db, cardId);
-      const now = clock.now();
-      const c = { now, tz: ctx.timeZone(), rng: reviewRng(cardId, now) };
-      return { 1: scheduler.next(s, 1, c), 3: scheduler.next(s, 3, { ...c, rng: reviewRng(cardId, now) }) };
+      const c = { now: clock.now(), tz: ctx.timeZone() };
+      return { 1: scheduler.next(s, 1, c), 3: scheduler.next(s, 3, c) };
     },
 
     /** Appends a log row and updates review_states atomically. */
@@ -137,22 +178,7 @@ export function createReviewRepo(ctx: RepoContext, scheduler: Scheduler = sm2b) 
             ctx.deviceId,
           ],
         );
-        await tx.run(
-          `UPDATE review_states SET algorithm = ?, phase = ?, due_at = ?, interval_days = ?, ease = ?, reps = ?, lapses = ?,
-             last_reviewed_at = ?, updated_at = ? WHERE card_id = ?`,
-          [
-            scheduler.id,
-            next.phase,
-            next.dueAt,
-            next.intervalDays,
-            next.ease,
-            next.reps,
-            next.lapses,
-            now,
-            now,
-            input.cardId,
-          ],
-        );
+        await writeState(tx, scheduler, input.cardId, next, now);
         return { logId, prev, next };
       });
     },
@@ -187,21 +213,16 @@ export function createReviewRepo(ctx: RepoContext, scheduler: Scheduler = sm2b) 
           [log.card_id, logId],
         );
         await tx.run('UPDATE review_logs SET undone_at = ? WHERE id = ?', [now, logId]);
-        await tx.run(
-          `UPDATE review_states SET phase = ?, due_at = ?, interval_days = ?, ease = ?, reps = ?, lapses = ?,
-             last_reviewed_at = ?, updated_at = ? WHERE card_id = ?`,
-          [
-            log.prev_phase,
-            log.prev_due_at,
-            log.prev_interval,
-            log.prev_ease,
-            log.prev_reps,
-            log.prev_lapses,
-            before?.t ?? null,
-            now,
-            log.card_id,
-          ],
-        );
+        const prev: ReviewState = {
+          phase: log.prev_phase,
+          dueAt: log.prev_due_at,
+          intervalDays: log.prev_interval,
+          ease: log.prev_ease,
+          reps: log.prev_reps,
+          lapses: log.prev_lapses,
+          lastReviewedAt: before?.t ?? null,
+        };
+        await writeState(tx, scheduler, log.card_id, prev, now);
       });
     },
 

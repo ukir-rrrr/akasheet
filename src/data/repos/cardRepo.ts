@@ -3,23 +3,15 @@ import { geometryBBox } from '@/domain/mask/geometry';
 import { readingOrder } from '@/domain/mask/order';
 import type { Mask, MaskGeometry, Size } from '@/domain/mask/types';
 import type { Phase } from '@/domain/scheduler/types';
-import { sm2b } from '@/domain/scheduler/sm2b';
 import { ValidationError } from '@/shared/errors';
 
 import type { SqlDriver } from '../db/driver';
+import type { NewMedia } from '../media/types';
 import type { RepoContext } from './context';
+import { upsertMedia } from './mediaRepo';
+import { insertInitialState } from './reviewRepo';
 
 export type CardSource = 'camera' | 'library' | 'sample' | 'import:anki' | 'import:csv';
-
-export type NewMedia = {
-  sha256: string;
-  path: string;
-  thumbPath: string;
-  mime: string;
-  width: number;
-  height: number;
-  byteSize: number;
-};
 
 export type NewCard = {
   folderId: string;
@@ -107,6 +99,10 @@ async function insertMasks(
   }
 }
 
+function placeholders(values: readonly unknown[]): string {
+  return values.map(() => '?').join(', ');
+}
+
 function validateInput(input: NewCard) {
   if (input.masks.length === 0) throw new ValidationError(EMPTY_MASKS_MESSAGE);
   if (!input.masks.every(isValidGeometry)) throw new ValidationError('マスクの形が正しくありません');
@@ -135,41 +131,16 @@ export function createCardRepo(ctx: RepoContext) {
       const now = clock.now();
       return db.transaction(async (tx) => {
         await liveFolder(tx, input.folderId);
-        const existing = await tx.get<{ id: string }>('SELECT id FROM media WHERE sha256 = ?', [
-          input.media.sha256,
-        ]);
-        const mediaId = existing?.id ?? ctx.newId();
-        if (existing) {
-          await tx.run(
-            'UPDATE media SET deleted_at = NULL, updated_at = ? WHERE id = ? AND deleted_at IS NOT NULL',
-            [now, mediaId],
-          );
-        } else {
-          const m = input.media;
-          await tx.run(
-            `INSERT INTO media (id, path, thumb_path, sha256, mime, width, height, byte_size, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [mediaId, m.path, m.thumbPath, m.sha256, m.mime, m.width, m.height, m.byteSize, now, now],
-          );
-        }
-        const media = await tx.get<{ width: number; height: number }>(
-          'SELECT width, height FROM media WHERE id = ?',
-          [mediaId],
-        );
+        const { mediaId, reused } = await upsertMedia(tx, ctx, input.media, now);
         const cardId = ctx.newId();
         await tx.run(
           `INSERT INTO cards (id, folder_id, media_id, title, source, created_device_id, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [cardId, input.folderId, mediaId, input.title ?? null, input.source, ctx.deviceId, now, now],
         );
-        await insertMasks(tx, ctx, cardId, input.masks, { width: media!.width, height: media!.height }, now);
-        const s = sm2b.initial(now);
-        await tx.run(
-          `INSERT INTO review_states (card_id, algorithm, phase, due_at, interval_days, ease, reps, lapses, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [cardId, sm2b.id, s.phase, s.dueAt, s.intervalDays, s.ease, s.reps, s.lapses, now],
-        );
-        return { cardId, mediaId, reusedMedia: !!existing };
+        await insertMasks(tx, ctx, cardId, input.masks, input.media, now);
+        await insertInitialState(tx, ctx.scheduler, cardId, now);
+        return { cardId, mediaId, reusedMedia: reused };
       });
     },
 
@@ -251,58 +222,32 @@ export function createCardRepo(ctx: RepoContext) {
     },
 
     async remove(cardIds: readonly string[]): Promise<void> {
+      if (cardIds.length === 0) return;
       const now = clock.now();
+      const ids = placeholders(cardIds);
       await db.transaction(async (tx) => {
-        for (const id of cardIds) {
-          await tx.run(
-            'UPDATE masks SET deleted_at = ?, updated_at = ? WHERE card_id = ? AND deleted_at IS NULL',
-            [now, now, id],
-          );
-          await tx.run(
-            'UPDATE cards SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL',
-            [now, now, id],
-          );
-        }
+        await tx.run(
+          `UPDATE masks SET deleted_at = ?, updated_at = ? WHERE card_id IN (${ids}) AND deleted_at IS NULL`,
+          [now, now, ...cardIds],
+        );
+        await tx.run(
+          `UPDATE cards SET deleted_at = ?, updated_at = ? WHERE id IN (${ids}) AND deleted_at IS NULL`,
+          [now, now, ...cardIds],
+        );
       });
     },
 
     async move(cardIds: readonly string[], folderId: string): Promise<void> {
+      if (cardIds.length === 0) return;
       const now = clock.now();
       await db.transaction(async (tx) => {
         await liveFolder(tx, folderId);
-        for (const id of cardIds) {
-          await tx.run('UPDATE cards SET folder_id = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL', [
-            folderId,
-            now,
-            id,
-          ]);
-        }
+        await tx.run(
+          `UPDATE cards SET folder_id = ?, updated_at = ? WHERE id IN (${placeholders(cardIds)}) AND deleted_at IS NULL`,
+          [folderId, now, ...cardIds],
+        );
       });
-    },
-
-    /** Media rows whose cards are all gone (or deleted before `cutoff`): safe to delete files for. */
-    async unreferencedMedia(cutoff: number): Promise<{ id: string; path: string; thumbPath: string }[]> {
-      const rows = await db.all<{ id: string; path: string; thumb_path: string }>(
-        `SELECT m.id, m.path, m.thumb_path FROM media m
-         WHERE m.deleted_at IS NULL AND NOT EXISTS (
-           SELECT 1 FROM cards c WHERE c.media_id = m.id AND (c.deleted_at IS NULL OR c.deleted_at > ?))`,
-        [cutoff],
-      );
-      return rows.map((r) => ({ id: r.id, path: r.path, thumbPath: r.thumb_path }));
-    },
-
-    async markMediaPurged(mediaId: string): Promise<void> {
-      const now = clock.now();
-      await db.run('UPDATE media SET deleted_at = ?, updated_at = ? WHERE id = ?', [now, now, mediaId]);
-    },
-
-    async livePaths(): Promise<Set<string>> {
-      const rows = await db.all<{ path: string; thumb_path: string }>(
-        'SELECT path, thumb_path FROM media WHERE deleted_at IS NULL',
-      );
-      return new Set(rows.flatMap((r) => [r.path, r.thumb_path]));
     },
   };
 }
-
 export type CardRepo = ReturnType<typeof createCardRepo>;

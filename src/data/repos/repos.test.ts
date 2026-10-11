@@ -3,13 +3,17 @@ import type { MaskGeometry } from '@/domain/mask/types';
 import { fixedClock } from '@/shared/clock';
 import { ValidationError } from '@/shared/errors';
 import { createIdGenerator } from '@/shared/id';
+import { sm2b } from '@/domain/scheduler/sm2b';
 
 import { migrate, userVersion } from '../db/migrate';
 import { LATEST_VERSION, MIGRATIONS } from '../db/migrations';
 import { createBetterSqliteDriver } from '../db/testing/betterSqliteDriver';
-import { createCardRepo, EMPTY_MASKS_MESSAGE, type NewMedia } from './cardRepo';
+import type { NewMedia } from '../media/types';
+import { createCardRepo, EMPTY_MASKS_MESSAGE } from './cardRepo';
 import type { RepoContext } from './context';
 import { createFolderRepo } from './folderRepo';
+import { createMediaRepo } from './mediaRepo';
+import { createMetaRepo } from './metaRepo';
 import { createReviewRepo } from './reviewRepo';
 
 const TZ = 'Asia/Tokyo';
@@ -47,6 +51,7 @@ async function setup() {
     }),
     deviceId: 'device-1',
     timeZone: () => TZ,
+    scheduler: sm2b,
   };
   return {
     db,
@@ -55,6 +60,7 @@ async function setup() {
     folders: createFolderRepo(ctx),
     cards: createCardRepo(ctx),
     reviews: createReviewRepo(ctx),
+    mediaRepo: createMediaRepo(ctx),
     end: () => dayEnd(clock.now(), TZ),
   };
 }
@@ -259,28 +265,80 @@ describe('cardRepo', () => {
     warn.mockRestore();
   });
 
-  it('moves and deletes cards; tracks unreferenced media for GC', async () => {
-    const { folders, cards, clock, end } = await setup();
+  it('moves and deletes cards', async () => {
+    const { folders, cards, end } = await setup();
     const a = await folders.create('a');
     const b = await folders.create('b');
-    const { cardId, mediaId } = await cards.create({
+    const { cardId } = await cards.create({
       folderId: a.id,
       media: media(),
       masks: [rect],
       source: 'library',
     });
-    await cards.move([cardId], b.id);
-    expect((await folders.list(end())).map((f) => f.cardCount)).toEqual([0, 1]);
+    const other = await cards.create({
+      folderId: a.id,
+      media: media('c'.repeat(64)),
+      masks: [rect],
+      source: 'library',
+    });
+    await cards.move([cardId, other.cardId], b.id);
+    expect((await folders.list(end())).map((f) => f.cardCount)).toEqual([0, 2]);
     await expect(cards.move([cardId], 'nope')).rejects.toBeInstanceOf(ValidationError);
-    await cards.remove([cardId]);
+    await cards.remove([cardId, other.cardId]);
     expect(await cards.listByFolder(b.id)).toEqual([]);
-    expect(await cards.unreferencedMedia(clock.now() - 30 * 86_400_000)).toEqual([]);
-    clock.advance(31 * 86_400_000);
-    const gc = await cards.unreferencedMedia(clock.now() - 30 * 86_400_000);
-    expect(gc.map((m) => m.id)).toEqual([mediaId]);
-    expect((await cards.livePaths()).size).toBe(2);
-    await cards.markMediaPurged(mediaId);
-    expect((await cards.livePaths()).size).toBe(0);
+  });
+});
+
+describe('mediaRepo', () => {
+  it('purges media only after its cards have been deleted for the grace period', async () => {
+    const { folders, cards, clock, mediaRepo } = await setup();
+    const f = await folders.create('a');
+    const kept = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
+    const gone = await cards.create({
+      folderId: f.id,
+      media: media('d'.repeat(64)),
+      masks: [rect],
+      source: 'library',
+    });
+    await cards.remove([gone.cardId]);
+    const grace = 30 * 86_400_000;
+    expect(await mediaRepo.purgeUnreferenced(clock.now() - grace)).toBe(0);
+    expect((await mediaRepo.livePaths()).size).toBe(4);
+    clock.advance(grace + 1);
+    expect(await mediaRepo.purgeUnreferenced(clock.now() - grace)).toBe(1);
+    const live = await mediaRepo.livePaths();
+    expect(live.size).toBe(2);
+    expect(live.has(media().path)).toBe(true);
+    expect(kept.mediaId).not.toBe(gone.mediaId);
+  });
+
+  it('revives a purged media row when the same image is saved again', async () => {
+    const { folders, cards, clock, mediaRepo } = await setup();
+    const f = await folders.create('a');
+    const first = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
+    await cards.remove([first.cardId]);
+    clock.advance(1);
+    await mediaRepo.purgeUnreferenced(clock.now());
+    expect((await mediaRepo.livePaths()).size).toBe(0);
+    const again = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
+    expect(again).toMatchObject({ mediaId: first.mediaId, reusedMedia: true });
+    expect((await mediaRepo.livePaths()).size).toBe(2);
+  });
+});
+
+describe('metaRepo', () => {
+  it('keeps a stable device id and caps counters', async () => {
+    const { db } = await setup();
+    const meta = createMetaRepo(db);
+    let n = 0;
+    const id = await meta.ensureDeviceId(() => `id-${++n}`);
+    expect(await meta.ensureDeviceId(() => `id-${++n}`)).toBe(id);
+    expect([
+      await meta.bumpCounter('hint', 2),
+      await meta.bumpCounter('hint', 2),
+      await meta.bumpCounter('hint', 2),
+    ]).toEqual([true, true, false]);
+    expect(await meta.get('hint')).toBe('2');
   });
 });
 
@@ -307,6 +365,17 @@ describe('reviewRepo', () => {
     expect(q.map((i) => i.cardId)).toEqual([c2.cardId, c1.cardId]);
     expect((await reviews.queue(a.id, end())).map((i) => i.cardId)).toEqual([c1.cardId]);
     expect(await reviews.newIntroducedSince(dayStart(clock.now(), TZ))).toBe(1);
+  });
+
+  it('queues explicit card ids regardless of due date, skipping deleted cards', async () => {
+    const { folders, cards, reviews } = await setup();
+    const f = await folders.create('a');
+    const c1 = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
+    const c2 = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
+    await reviews.answer({ cardId: c1.cardId, rating: 3, revealedCount: 1, maskCount: 1, durationMs: null });
+    await cards.remove([c2.cardId]);
+    expect(await reviews.queueFor([])).toEqual([]);
+    expect((await reviews.queueFor([c1.cardId, c2.cardId])).map((i) => i.cardId)).toEqual([c1.cardId]);
   });
 
   it('answers atomically and undo restores the previous state', async () => {
