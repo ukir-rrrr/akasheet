@@ -113,7 +113,9 @@ test('create a folder and a masked card, then review it', async ({ page }) => {
 
   await page.getByTestId('see-summary').click();
   await expect(page.getByTestId('summary-title')).toHaveText('おつかれさまでした');
-  await expect(page.getByTestId('summary-remembered')).toHaveText('1');
+  await expect(page.getByTestId('summary-remembered')).toHaveText('0');
+  await expect(page.getByText('まだ 1枚')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'まだを もう一度' })).toBeVisible();
   await shot('summary');
 
   await page.getByTestId('summary-back').click();

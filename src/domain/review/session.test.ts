@@ -88,13 +88,20 @@ describe('review session', () => {
     expect(() => applyAnswer(startSession([], 20), { cardId: 'zzz', rating: 3, logId: 'x' }, 0)).toThrow();
   });
 
-  it('counts the last rating per card for the summary', () => {
+  it('counts a card as まだ when it was rated まだ at least once, even if later 覚えた', () => {
     let s = startSession(items, 2); // r1 r2 n1 n2
     s = answer(s, 1); // r1 まだ → r2 n1 n2 r1
     s = answer(s, 3);
     s = answer(s, 1); // n1 まだ → n2 r1 n1
     s = answer(s, 3); // n2
-    s = answer(s, 3); // r1 覚えた
-    expect(sessionStats(s)).toEqual({ total: 4, remembered: 3, again: ['n1'] });
+    s = answer(s, 3); // r1 覚えた (still まだ for summary)
+    expect(sessionStats(s)).toEqual({ total: 4, remembered: 2, again: ['r1', 'n1'] });
+  });
+
+  it('counts each card once when まだ then 覚えた on the same card in one session', () => {
+    let s = startSession([{ cardId: 'c1', phase: 'review', dueAt: 0 }], 20);
+    s = answer(s, 1);
+    s = answer(s, 3);
+    expect(sessionStats(s)).toEqual({ total: 1, remembered: 0, again: ['c1'] });
   });
 });

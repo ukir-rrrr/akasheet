@@ -134,10 +134,14 @@ export function nextPendingIn(s: SessionState, now: number): number | null {
 
 export type SessionStats = { total: number; remembered: number; again: string[] };
 
-/** Per-card outcome: the last rating of each card in this session counts. */
+/** Per-card outcome: any card rated まだ at least once in the session counts as まだ (once each). */
 export function sessionStats(s: SessionState): SessionStats {
-  const last = new Map<string, Rating>();
-  for (const a of s.answers) last.set(a.cardId, a.rating);
-  const again = [...last].filter(([, r]) => r === 1).map(([id]) => id);
-  return { total: last.size, remembered: last.size - again.length, again };
+  const everAgain = new Set<string>();
+  const seen = new Set<string>();
+  for (const a of s.answers) {
+    seen.add(a.cardId);
+    if (a.rating === 1) everAgain.add(a.cardId);
+  }
+  const again = [...everAgain];
+  return { total: seen.size, remembered: seen.size - again.length, again };
 }
