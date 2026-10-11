@@ -69,7 +69,9 @@ export function SummaryScreen() {
   const [zoomId, setZoomId] = useState<string | null>(null);
 
   const backToFolder = () => {
-    if (result && result.folderId !== 'all')
+    // The summary replaced the review modal, so the screen that started the review is right underneath.
+    if (router.canGoBack()) router.back();
+    else if (result && result.folderId !== 'all')
       router.replace({ pathname: '/folders/[folderId]', params: { folderId: result.folderId } });
     else router.replace('/');
   };

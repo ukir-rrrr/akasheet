@@ -134,7 +134,7 @@ export function Toolbar({ state, dispatch }: { state: EditorState; dispatch: (a:
         />
         <ToolButton
           icon="hand-left-outline"
-          label="選択・消す"
+          label="選択"
           active={state.tool === 'select'}
           onPress={() => setTool('select')}
           testID="tool-select"

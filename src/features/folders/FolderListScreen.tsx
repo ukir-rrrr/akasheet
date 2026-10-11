@@ -131,7 +131,7 @@ export function FolderListScreen() {
         ]}
       >
         <View style={styles.headerRow}>
-          <AppText variant="button">めくる</AppText>
+          <AppText variant="button">akasheet</AppText>
           <AppText variant="sub" color={c.ink3}>
             {formatHeaderDate(today.now, today.tz)}
           </AppText>

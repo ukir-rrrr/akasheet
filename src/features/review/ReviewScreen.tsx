@@ -117,6 +117,8 @@ export function ReviewScreen({
     );
   }
 
+  // After the final answer the summary waits for the undo window; say so instead of showing an empty stage.
+  const wrappingUp = r.finished && !!r.session && r.session.answers.length > 0;
   const unrevealed = r.orderedIds.filter((id) => !r.revealed.has(id));
   const nextNumber = r.masks.find((m) => !r.revealed.has(m.id))?.ord;
   const noneRevealed = unrevealed.length === r.masks.length && r.masks.length > 0;
@@ -155,6 +157,24 @@ export function ReviewScreen({
       </View>
 
       <View style={{ flex: 1 }}>
+        {wrappingUp && (
+          <View style={styles.center} testID="review-wrapping-up">
+            <Icon name="checkmark-circle" size={48} color={c.matcha} />
+            <AppText variant="headingMincho" style={{ marginTop: 16, textAlign: 'center' }}>
+              今日の分が終わりました
+            </AppText>
+            <AppText variant="sub" color={c.ink3} style={{ marginTop: 8, textAlign: 'center' }}>
+              最後の回答は数秒のあいだ取り消せます
+            </AppText>
+            <Button
+              label="結果を見る"
+              onPress={r.clearLast}
+              height={heights.cta}
+              style={{ alignSelf: 'stretch', marginTop: 28 }}
+              testID="see-summary"
+            />
+          </View>
+        )}
         {r.card.data && r.cardId && (
           <Animated.View
             key={`${r.cardId}-${r.session?.answers.length}`}
@@ -194,97 +214,99 @@ export function ReviewScreen({
         )}
       </View>
 
-      <View
-        style={[
-          styles.thumbZone,
-          { paddingBottom: insets.bottom + 12, backgroundColor: c.surface, borderTopColor: c.line },
-        ]}
-      >
-        <View style={styles.row}>
-          <PressableScale
-            testID="reveal-next"
-            accessibilityRole="button"
-            accessibilityLabel={
-              nextNumber !== undefined ? `次をめくる、答え ${nextNumber + 1}` : '次をめくる'
-            }
-            disabled={unrevealed.length === 0}
-            onPress={() => {
-              haptic.selection();
-              setStagger(undefined);
-              r.revealNext();
-            }}
-            style={[
-              styles.secondary,
-              { borderColor: c.lineStrong, opacity: unrevealed.length === 0 ? 0.45 : 1 },
-            ]}
-          >
-            {nextNumber !== undefined && (
-              <View style={[styles.chip, { backgroundColor: c.shuInk }]}>
-                <AppText variant="caption" color="#FFFFFF">
-                  {nextNumber + 1}
+      {!wrappingUp && (
+        <View
+          style={[
+            styles.thumbZone,
+            { paddingBottom: insets.bottom + 12, backgroundColor: c.surface, borderTopColor: c.line },
+          ]}
+        >
+          <View style={styles.row}>
+            <PressableScale
+              testID="reveal-next"
+              accessibilityRole="button"
+              accessibilityLabel={
+                nextNumber !== undefined ? `次をめくる、答え ${nextNumber + 1}` : '次をめくる'
+              }
+              disabled={unrevealed.length === 0}
+              onPress={() => {
+                haptic.selection();
+                setStagger(undefined);
+                r.revealNext();
+              }}
+              style={[
+                styles.secondary,
+                { borderColor: c.lineStrong, opacity: unrevealed.length === 0 ? 0.45 : 1 },
+              ]}
+            >
+              {nextNumber !== undefined && (
+                <View style={[styles.chip, { backgroundColor: c.shuInk }]}>
+                  <AppText variant="caption" color="#FFFFFF">
+                    {nextNumber + 1}
+                  </AppText>
+                </View>
+              )}
+              <AppText variant="button">次をめくる</AppText>
+            </PressableScale>
+            <PressableScale
+              testID="reveal-all"
+              accessibilityRole="button"
+              disabled={unrevealed.length === 0}
+              onPress={() => {
+                haptic.light();
+                setStagger(unrevealed);
+                r.revealAll();
+              }}
+              style={[
+                styles.secondary,
+                { borderColor: c.lineStrong, opacity: unrevealed.length === 0 ? 0.45 : 1 },
+              ]}
+            >
+              <Icon name="layers-outline" size={18} />
+              <AppText variant="button">全部めくる</AppText>
+            </PressableScale>
+          </View>
+          <View style={[styles.row, { opacity: noneRevealed ? 0.6 : 1 }]}>
+            <PressableScale
+              testID="answer-again"
+              accessibilityRole="button"
+              accessibilityLabel={`まだ、${againCaption}`}
+              disabled={r.busy || !r.cardId}
+              onPress={() => onAnswer(1)}
+              style={[styles.answer, { backgroundColor: c.shuTint, borderWidth: 2, borderColor: c.mask }]}
+            >
+              <View style={styles.answerLabel}>
+                <Icon name="refresh" color={c.shuTintInk} size={20} />
+                <AppText variant="answer" color={c.shuTintInk}>
+                  まだ
                 </AppText>
               </View>
-            )}
-            <AppText variant="button">次をめくる</AppText>
-          </PressableScale>
-          <PressableScale
-            testID="reveal-all"
-            accessibilityRole="button"
-            disabled={unrevealed.length === 0}
-            onPress={() => {
-              haptic.light();
-              setStagger(unrevealed);
-              r.revealAll();
-            }}
-            style={[
-              styles.secondary,
-              { borderColor: c.lineStrong, opacity: unrevealed.length === 0 ? 0.45 : 1 },
-            ]}
-          >
-            <Icon name="layers-outline" size={18} />
-            <AppText variant="button">全部めくる</AppText>
-          </PressableScale>
-        </View>
-        <View style={[styles.row, { opacity: noneRevealed ? 0.6 : 1 }]}>
-          <PressableScale
-            testID="answer-again"
-            accessibilityRole="button"
-            accessibilityLabel={`まだ、${againCaption}`}
-            disabled={r.busy || !r.cardId}
-            onPress={() => onAnswer(1)}
-            style={[styles.answer, { backgroundColor: c.shuTint, borderWidth: 2, borderColor: c.mask }]}
-          >
-            <View style={styles.answerLabel}>
-              <Icon name="refresh" color={c.shuTintInk} size={20} />
-              <AppText variant="answer" color={c.shuTintInk}>
-                まだ
+              <AppText variant="caption" color={c.shuTintInk}>
+                {againCaption}
               </AppText>
-            </View>
-            <AppText variant="caption" color={c.shuTintInk}>
-              {againCaption}
-            </AppText>
-          </PressableScale>
-          <PressableScale
-            testID="answer-good"
-            accessibilityRole="button"
-            accessibilityLabel={`覚えた、次は${goodCaption}`}
-            disabled={r.busy || !r.cardId}
-            onPress={() => onAnswer(3)}
-            style={[styles.answer, { backgroundColor: c.matcha }]}
-          >
-            <View style={styles.answerLabel}>
-              <Icon name="checkmark" color="#FFFFFF" size={22} />
-              <AppText variant="answer" color="#FFFFFF">
-                覚えた
+            </PressableScale>
+            <PressableScale
+              testID="answer-good"
+              accessibilityRole="button"
+              accessibilityLabel={`覚えた、次は${goodCaption}`}
+              disabled={r.busy || !r.cardId}
+              onPress={() => onAnswer(3)}
+              style={[styles.answer, { backgroundColor: c.matcha }]}
+            >
+              <View style={styles.answerLabel}>
+                <Icon name="checkmark" color="#FFFFFF" size={22} />
+                <AppText variant="answer" color="#FFFFFF">
+                  覚えた
+                </AppText>
+              </View>
+              <AppText variant="caption" color="#FFFFFF">
+                次は{goodCaption}
               </AppText>
-            </View>
-            <AppText variant="caption" color="#FFFFFF">
-              次は{goodCaption}
-            </AppText>
-          </PressableScale>
+            </PressableScale>
+          </View>
         </View>
-      </View>
-      <Toast spec={toast} onDone={r.clearLast} bottom={insets.bottom + 180} />
+      )}
+      <Toast spec={toast} onDone={r.clearLast} bottom={insets.bottom + (wrappingUp ? 24 : 180)} />
     </View>
   );
 }

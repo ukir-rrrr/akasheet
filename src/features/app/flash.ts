@@ -1,3 +1,4 @@
+import { useIsFocused } from 'expo-router';
 import { useSyncExternalStore } from 'react';
 
 import type { ToastSpec } from '@/ui/Toast';
@@ -18,12 +19,15 @@ export const flash = {
   },
 };
 
+/** Only the focused screen shows the flash; screens kept mounted under the stack stay silent. */
 export function useFlash(): ToastSpec | null {
-  return useSyncExternalStore(
+  const focused = useIsFocused();
+  const spec = useSyncExternalStore(
     (l) => {
       listeners.add(l);
       return () => listeners.delete(l);
     },
     () => current,
   );
+  return focused ? spec : null;
 }
