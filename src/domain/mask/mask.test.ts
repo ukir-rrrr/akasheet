@@ -26,10 +26,16 @@ describe('transform', () => {
     height: fc.integer({ min: 100, max: 4000 }),
   });
 
+  // Rounding error is 0.5e-4 × displayed size; device screens (≤1400pt) at ≤6x zoom stay under 0.5pt.
+  const screens = fc.record({
+    width: fc.integer({ min: 100, max: 1400 }),
+    height: fc.integer({ min: 100, max: 1400 }),
+  });
+
   it('screen → normalized (4 digits) → screen round-trips within 0.5pt', () => {
     fc.assert(
       fc.property(
-        sizes,
+        screens,
         sizes,
         fc.constantFrom(1, 2, 6),
         fc.double({ min: 0, max: 1, noNaN: true }),
@@ -40,8 +46,8 @@ describe('transform', () => {
           const s = imageToScreen({ x: a * img.width, y: b * img.height }, fit, zp);
           const n = imageToNorm(screenToImage(s, fit, zp), img);
           const back = imageToScreen(normToImage({ x: round4(n.x), y: round4(n.y) }, img), fit, zp);
-          expect(Math.abs(back.x - s.x)).toBeLessThanOrEqual(0.5);
-          expect(Math.abs(back.y - s.y)).toBeLessThanOrEqual(0.5);
+          expect(Math.abs(back.x - s.x)).toBeLessThanOrEqual(0.5 + 1e-9);
+          expect(Math.abs(back.y - s.y)).toBeLessThanOrEqual(0.5 + 1e-9);
         },
       ),
     );
