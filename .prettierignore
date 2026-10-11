@@ -1,0 +1,10 @@
+node_modules
+.expo
+dist
+coverage
+public
+uploads
+test-results
+playwright-report
+package-lock.json
+assets/expo.icon

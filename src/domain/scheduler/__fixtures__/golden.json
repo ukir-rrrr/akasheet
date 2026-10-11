@@ -1,0 +1,87 @@
+{
+  "_comment": "DESIGN.md §6.5. Fuzz disabled. Times are ISO-8601 with explicit offsets; 'start' omitted means a new card.",
+  "vectors": [
+    {
+      "id": "1-new-good",
+      "tz": "Asia/Tokyo",
+      "steps": [
+        {
+          "at": "2026-10-11T13:00:00+09:00",
+          "rating": 3,
+          "expect": { "phase": "review", "intervalDays": 1, "reps": 1, "dueAt": "2026-10-12T04:00:00+09:00" }
+        }
+      ]
+    },
+    {
+      "id": "1-5-chain",
+      "tz": "Asia/Tokyo",
+      "steps": [
+        { "at": "2026-10-11T13:00:00+09:00", "rating": 3, "expect": { "intervalDays": 1, "reps": 1, "dueAt": "2026-10-12T04:00:00+09:00" } },
+        { "at": "2026-10-12T13:00:00+09:00", "rating": 3, "expect": { "intervalDays": 6, "reps": 2, "dueAt": "2026-10-18T04:00:00+09:00" } },
+        { "at": "2026-10-18T13:00:00+09:00", "rating": 3, "expect": { "intervalDays": 15, "reps": 3, "dueAt": "2026-11-02T04:00:00+09:00" } },
+        {
+          "at": "2026-11-02T13:00:00+09:00",
+          "rating": 1,
+          "expect": { "phase": "relearning", "intervalDays": 15, "ease": 2.3, "lapses": 1, "dueAt": "2026-11-02T13:10:00+09:00" }
+        },
+        {
+          "at": "2026-11-02T13:10:00+09:00",
+          "rating": 3,
+          "expect": { "phase": "review", "intervalDays": 8, "reps": 2, "dueAt": "2026-11-10T04:00:00+09:00" }
+        }
+      ]
+    },
+    {
+      "id": "6-before-cutoff",
+      "tz": "Asia/Tokyo",
+      "steps": [
+        { "at": "2026-10-11T02:30:00+09:00", "rating": 3, "expect": { "intervalDays": 1, "dueAt": "2026-10-11T04:00:00+09:00" } }
+      ]
+    },
+    {
+      "id": "7-new-again-again",
+      "tz": "Asia/Tokyo",
+      "steps": [
+        {
+          "at": "2026-10-11T13:00:00+09:00",
+          "rating": 1,
+          "expect": { "phase": "learning", "ease": 2.5, "lapses": 0, "dueAt": "2026-10-11T13:10:00+09:00" }
+        },
+        {
+          "at": "2026-10-11T13:10:00+09:00",
+          "rating": 1,
+          "expect": { "phase": "learning", "ease": 2.5, "lapses": 0, "dueAt": "2026-10-11T13:20:00+09:00" }
+        }
+      ]
+    },
+    {
+      "id": "8-ease-floor",
+      "tz": "Asia/Tokyo",
+      "start": { "phase": "review", "intervalDays": 10, "ease": 1.4, "reps": 4, "lapses": 0, "dueAt": "2026-10-11T04:00:00+09:00" },
+      "steps": [
+        { "at": "2026-10-11T13:00:00+09:00", "rating": 1, "expect": { "phase": "relearning", "ease": 1.3, "lapses": 1 } },
+        { "at": "2026-10-11T13:10:00+09:00", "rating": 3, "expect": { "phase": "review", "intervalDays": 5 } },
+        { "at": "2026-10-16T13:00:00+09:00", "rating": 1, "expect": { "phase": "relearning", "ease": 1.3, "lapses": 2 } }
+      ]
+    },
+    {
+      "id": "9-max-interval",
+      "tz": "Asia/Tokyo",
+      "start": { "phase": "review", "intervalDays": 3000, "ease": 2.5, "reps": 5, "lapses": 0, "dueAt": "2026-10-11T04:00:00+09:00" },
+      "steps": [{ "at": "2026-10-11T13:00:00+09:00", "rating": 3, "expect": { "intervalDays": 3650, "reps": 6 } }]
+    },
+    {
+      "id": "10-relearning-short",
+      "tz": "Asia/Tokyo",
+      "start": { "phase": "relearning", "intervalDays": 5, "ease": 2.3, "reps": 3, "lapses": 1, "dueAt": "2026-10-11T04:00:00+09:00" },
+      "steps": [{ "at": "2026-10-11T13:00:00+09:00", "rating": 3, "expect": { "phase": "review", "intervalDays": 3, "reps": 1 } }]
+    },
+    {
+      "id": "dst-new-york",
+      "tz": "America/New_York",
+      "steps": [
+        { "at": "2026-03-08T01:30:00-05:00", "rating": 3, "expect": { "intervalDays": 1, "dueAt": "2026-03-08T04:00:00-04:00" } }
+      ]
+    }
+  ]
+}
