@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1460" viewBox="0 0 1100 1460">
+  <!-- Self-drawn sample page for akasheet (original text and layout). Source of assets/sample/textbook.jpg; regenerate with `npm run sample`. -->
+  <rect width="1100" height="1460" fill="#fbf8f1"/>
+  <g font-family="'Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif" font-size="22" fill="#555"><text x="80" y="100">第2章 中世社会の成立</text><text x="1020" y="100" text-anchor="end">サンプル教材</text></g>
+  <rect x="80" y="116" width="940" height="2" fill="#2d5b8c"/>
+  <rect x="80" y="168" width="54" height="54" fill="#2d5b8c"/>
+  <text x="107" y="207" font-family="'Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif" font-size="34" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+  <text x="154" y="212" font-family="'Noto Serif CJK JP','Hiragino Mincho ProN','Yu Mincho',serif" font-size="46" font-weight="700" fill="#222">鎌倉幕府の成立</text>
+  <g font-family="'Noto Serif CJK JP','Hiragino Mincho ProN','Yu Mincho',serif" font-size="29" fill="#222">
+    <text x="109" y="300.0">1180年、伊豆に流されていた源頼朝は平氏を倒すために兵を挙げ、相</text>
+    <text x="80" y="356.5">模の鎌倉を根拠地として東国の武士をまとめた。1185年、頼朝は国ごと</text>
+    <text x="80" y="413.0">に守護を、荘園や公領ごとに地頭を置くことを朝廷に認めさせ、全国に</text>
+    <text x="80" y="469.5">支配を広げる足がかりを得た。</text>
+  </g>
+  <g font-family="'Noto Serif CJK JP','Hiragino Mincho ProN','Yu Mincho',serif" font-size="29" fill="#222">
+    <text x="109" y="526.0">将軍と主従関係を結んだ武士は御家人とよばれた。将軍は御家人の領</text>
+    <text x="80" y="582.5">地を保障したり新しい領地を与えたりする御恩を施し、御家人は戦いの</text>
+    <text x="80" y="639.0">ときに軍役を務める奉公でこたえた。</text>
+  </g>
+  <text x="80" y="725.5" font-family="'Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif" font-size="30" font-weight="700" fill="#2d5b8c">■ 執権政治</text>
+  <g font-family="'Noto Serif CJK JP','Hiragino Mincho ProN','Yu Mincho',serif" font-size="29" fill="#222">
+    <text x="109" y="787.5">頼朝の死後、北条氏が執権として幕府の実権をにぎった。1221年の承</text>
+    <text x="80" y="844.0">久の乱で朝廷方を破ると、幕府は京都に六波羅探題を置いて朝廷を監視</text>
+    <text x="80" y="900.5">した。1232年、執権北条泰時は武士の裁判の基準として御成敗式目を定</text>
+    <text x="80" y="957.0">めた。</text>
+  </g>
+  <rect x="80" y="1023.5" width="940" height="364" fill="#f1f5f8" stroke="#99aabb" stroke-width="2"/>
+  <text x="110" y="1067.5" font-family="'Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif" font-size="22" fill="#2d5b8c">図 鎌倉幕府のしくみ</text>
+  <rect x="410" y="1093.5" width="280" height="50" fill="#fff" stroke="#555577" stroke-width="2"/>
+  <text x="550.0" y="1127.5" font-family="'Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif" font-size="24" fill="#222" text-anchor="middle">将軍</text>
+  <rect x="410" y="1161.5" width="280" height="50" fill="#fff" stroke="#555577" stroke-width="2"/>
+  <text x="550.0" y="1195.5" font-family="'Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif" font-size="24" fill="#222" text-anchor="middle">執権</text>
+  <path d="M550.0 1143.5 V1161.5 M550.0 1211.5 V1241.5 M250.0 1241.5 H850.0 M250.0 1241.5 V1253.5 M550.0 1241.5 V1253.5 M850.0 1241.5 V1253.5" stroke="#555577" stroke-width="2" fill="none"/>
+  <rect x="110" y="1253.5" width="280" height="50" fill="#fff" stroke="#555577" stroke-width="2"/>
+  <text x="250.0" y="1287.5" font-family="'Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif" font-size="24" fill="#222" text-anchor="middle">侍所</text>
+  <rect x="410" y="1253.5" width="280" height="50" fill="#fff" stroke="#555577" stroke-width="2"/>
+  <text x="550.0" y="1287.5" font-family="'Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif" font-size="24" fill="#222" text-anchor="middle">政所</text>
+  <rect x="710" y="1253.5" width="280" height="50" fill="#fff" stroke="#555577" stroke-width="2"/>
+  <text x="850.0" y="1287.5" font-family="'Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif" font-size="24" fill="#222" text-anchor="middle">問注所</text>
+  <rect x="110" y="1315.5" width="280" height="50" fill="#fff" stroke="#555577" stroke-width="2"/>
+  <text x="250.0" y="1349.5" font-family="'Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif" font-size="24" fill="#222" text-anchor="middle">六波羅探題</text>
+  <rect x="410" y="1315.5" width="280" height="50" fill="#fff" stroke="#555577" stroke-width="2"/>
+  <text x="550.0" y="1349.5" font-family="'Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif" font-size="24" fill="#222" text-anchor="middle">守護</text>
+  <rect x="710" y="1315.5" width="280" height="50" fill="#fff" stroke="#555577" stroke-width="2"/>
+  <text x="850.0" y="1349.5" font-family="'Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif" font-size="24" fill="#222" text-anchor="middle">地頭</text>
+  <text x="550.0" y="1420" font-family="'Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif" font-size="20" fill="#777" text-anchor="middle">— 48 —</text>
+</svg>
