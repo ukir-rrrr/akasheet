@@ -3,12 +3,14 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { goBackOr } from '@/features/app/navigation';
 import { useCard, useNextDue, useToday } from '@/features/app/queries';
 import { MaskThumb } from '@/features/canvas/MaskThumb';
 import { formatDateTime, formatShortDate } from '@/ui/format';
 import { AppText, Button, PressableScale } from '@/ui/primitives';
 import { heights, radius, useTheme } from '@/ui/theme';
 
+import { ALL_FOLDERS } from './ReviewScreen';
 import { sessionResult } from './sessionResult';
 
 function AgainThumb({ cardId, onOpen }: { cardId: string; onOpen: () => void }) {
@@ -64,16 +66,15 @@ export function SummaryScreen() {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const today = useToday();
-  const [result] = useState(() => sessionResult.get());
-  const nextDue = useNextDue(result && result.folderId !== 'all' ? result.folderId : null);
+  const [result] = useState(() => sessionResult.peek());
+  const nextDue = useNextDue(result?.folderId ?? null);
   const [zoomId, setZoomId] = useState<string | null>(null);
 
   const backToFolder = () => {
     // The summary replaced the review modal, so the screen that started the review is right underneath.
-    if (router.canGoBack()) router.back();
-    else if (result && result.folderId !== 'all')
-      router.replace({ pathname: '/folders/[folderId]', params: { folderId: result.folderId } });
-    else router.replace('/');
+    goBackOr(
+      result?.folderId ? { pathname: '/folders/[folderId]', params: { folderId: result.folderId } } : '/',
+    );
   };
 
   if (!result) {
@@ -199,7 +200,7 @@ export function SummaryScreen() {
             onPress={() =>
               router.replace({
                 pathname: '/review/[folderId]',
-                params: { folderId: result.folderId, ids: result.againIds.join(',') },
+                params: { folderId: result.folderId ?? ALL_FOLDERS, ids: result.againIds.join(',') },
               })
             }
           />

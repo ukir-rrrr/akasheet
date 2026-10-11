@@ -3,13 +3,13 @@ import * as ImagePicker from 'expo-image-picker';
 import { Linking } from 'react-native';
 
 import type { CardSource } from '@/data/repos/cardRepo';
+import { createHandoff } from '@/features/app/handoff';
+import type { DialogApi } from '@/ui/dialogs';
 
 export type PickSource = Extract<CardSource, 'camera' | 'library' | 'sample'>;
 export type PickedImage = { uri: string; source: PickSource };
 
-type Dialogs = {
-  sheet: (r: { title: string; message: string; actions: { label: string }[] }) => Promise<number | null>;
-};
+type Dialogs = Pick<DialogApi, 'sheet'>;
 
 const SAMPLE = require('../../../assets/sample/textbook.jpg');
 
@@ -26,9 +26,9 @@ async function ensurePermission(source: 'camera' | 'library', dialogs: Dialogs):
   const choice = await dialogs.sheet({
     title: source === 'camera' ? 'カメラを使えません' : '写真を読み込めません',
     message: `設定アプリで許可すると使えるようになります。${other}`,
-    actions: [{ label: '設定を開く' }],
+    actions: [{ value: 'settings' as const, label: '設定を開く' }],
   });
-  if (choice === 0) await Linking.openSettings().catch(() => undefined);
+  if (choice === 'settings') await Linking.openSettings().catch(() => undefined);
   return false;
 }
 
@@ -54,16 +54,5 @@ export async function pickImage(source: PickSource, dialogs: Dialogs): Promise<P
   return { uri: result.assets[0].uri, source };
 }
 
-let pending: PickedImage | null = null;
-
 /** Hands a picked image to the editor route without putting large URIs in route params. */
-export const pendingImage = {
-  set: (p: PickedImage) => {
-    pending = p;
-  },
-  take: (): PickedImage | null => {
-    const p = pending;
-    pending = null;
-    return p;
-  },
-};
+export const pendingImage = createHandoff<PickedImage>();

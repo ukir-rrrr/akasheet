@@ -3,12 +3,9 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { Platform, Share, StyleSheet, View } from 'react-native';
 
 import { openAppData, type AppData } from '@/data/db/client';
-import { collectGarbage } from '@/data/media/mediaStore';
 import { errorMessage } from '@/shared/errors';
 import { AppText, Button, Icon } from '@/ui/primitives';
 import { useTheme } from '@/ui/theme';
-
-const GC_GRACE_MS = 30 * 86_400_000;
 
 const AppDataContext = createContext<AppData | null>(null);
 
@@ -21,10 +18,7 @@ export function useAppData(): AppData {
 async function startup(): Promise<AppData> {
   const app = await openAppData();
   try {
-    // Files of media whose cards were deleted 30+ days ago, then any orphan files left by failed saves.
-    const purge = await app.cards.unreferencedMedia(app.ctx.clock.now() - GC_GRACE_MS);
-    for (const m of purge) await app.cards.markMediaPurged(m.id);
-    await collectGarbage(await app.cards.livePaths());
+    await app.runMaintenance();
   } catch (e) {
     console.warn('media GC failed', e);
   }

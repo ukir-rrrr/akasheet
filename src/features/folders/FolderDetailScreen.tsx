@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CardSummary } from '@/data/repos/cardRepo';
 import { useAppData } from '@/features/app/AppDataProvider';
 import { flash, useFlash } from '@/features/app/flash';
+import { goBackOr } from '@/features/app/navigation';
 import {
   useCards,
   useFolder,
@@ -80,7 +81,7 @@ export function FolderDetailScreen({ folderId }: { folderId: string }) {
   const contentWidth = Math.min(width, 720) - 32;
   const thumbWidth = (contentWidth - 12 * (columns - 1)) / columns;
 
-  const back = () => (router.canGoBack() ? router.back() : router.replace('/'));
+  const back = () => goBackOr('/');
 
   const openMenu = async () => {
     if (!folder.data) return;
@@ -93,14 +94,16 @@ export function FolderDetailScreen({ folderId }: { folderId: string }) {
       await dialogs.alert('移動先のフォルダがありません', '先にフォルダを追加してください。');
       return;
     }
-    const choice = await dialogs.sheet({
+    const target = await dialogs.sheet({
       title: `${ids.length}枚を移動`,
-      actions: others.map((f) => ({ label: f.name })),
+      actions: others.map((f) => ({ value: f.id, label: f.name })),
     });
-    if (choice === null) return;
-    await app.cards.move(ids, others[choice].id);
-    setSelected(null);
-    await invalidate();
+    if (target === null) return;
+    await dialogs.attempt('移動できませんでした', async () => {
+      await app.cards.move(ids, target);
+      setSelected(null);
+      await invalidate();
+    });
   };
 
   const deleteCards = async (ids: string[]) => {
@@ -111,23 +114,31 @@ export function FolderDetailScreen({ folderId }: { folderId: string }) {
       destructive: true,
     });
     if (!ok) return;
-    await app.cards.remove(ids);
-    setSelected(null);
-    await invalidate();
+    await dialogs.attempt('削除できませんでした', async () => {
+      await app.cards.remove(ids);
+      setSelected(null);
+      await invalidate();
+    });
   };
 
   const cardMenu = async (card: CardSummary) => {
     haptic.medium();
     const choice = await dialogs.sheet({
       actions: [
-        { label: '複数選択', icon: 'checkmark-circle-outline' },
-        { label: '別のフォルダへ移動', icon: 'folder-open-outline' },
-        { label: '削除', icon: 'trash-outline', destructive: true, hint: '元に戻せません' },
+        { value: 'select' as const, label: '複数選択', icon: 'checkmark-circle-outline' },
+        { value: 'move' as const, label: '別のフォルダへ移動', icon: 'folder-open-outline' },
+        {
+          value: 'delete' as const,
+          label: '削除',
+          icon: 'trash-outline',
+          destructive: true,
+          hint: '元に戻せません',
+        },
       ],
     });
-    if (choice === 0) setSelected([card.id]);
-    if (choice === 1) await moveCards([card.id]);
-    if (choice === 2) await deleteCards([card.id]);
+    if (choice === 'select') setSelected([card.id]);
+    if (choice === 'move') await moveCards([card.id]);
+    if (choice === 'delete') await deleteCards([card.id]);
   };
 
   if (folder.isError || cards.isError) {

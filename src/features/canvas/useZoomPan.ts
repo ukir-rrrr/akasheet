@@ -43,5 +43,5 @@ export function useZoomPan(img: Size | null) {
     .numberOfTaps(2)
     .onEnd(() => setZp(IDENTITY_ZOOM));
 
-  return { view, fit, zp, onLayout, pinch, doubleTap, reset: () => setZp(IDENTITY_ZOOM) };
+  return { view, fit, zp, onLayout, pinch, doubleTap };
 }

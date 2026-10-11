@@ -1,6 +1,9 @@
+import { createHandoff } from '@/features/app/handoff';
+
 /** Hand-off from the review screen to the summary route (kept in memory; not persisted). */
 export type SessionResult = {
-  folderId: string;
+  /** null = all folders. */
+  folderId: string | null;
   folderName: string;
   total: number;
   remembered: number;
@@ -11,11 +14,4 @@ export type SessionResult = {
   pendingIn: number | null;
 };
 
-let last: SessionResult | null = null;
-
-export const sessionResult = {
-  set: (r: SessionResult) => {
-    last = r;
-  },
-  get: () => last,
-};
+export const sessionResult = createHandoff<SessionResult>();

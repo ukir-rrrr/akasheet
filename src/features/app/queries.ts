@@ -1,7 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
-import { resolveMediaUri } from '@/data/media/mediaStore';
 import { dayEnd, dayStart } from '@/domain/scheduler/day';
 
 import { useAppData } from './AppDataProvider';
@@ -13,12 +12,16 @@ export const keys = {
   card: (id: string) => ['card', id] as const,
   media: (rel: string) => ['media', rel] as const,
   nextDue: (folderId: string | null) => ['nextDue', folderId ?? 'all'] as const,
+  preview: (cardId: string, answered: number) => ['preview', cardId, answered] as const,
 };
 
+/** Query roots derived from cards/review state (media URIs are content-addressed and never go stale). */
+const DERIVED_ROOTS = [keys.folders[0], 'folder', 'cards', 'card', 'nextDue', 'preview'] as const;
+
 export function useToday() {
-  const { ctx } = useAppData();
-  const now = ctx.clock.now();
-  const tz = ctx.timeZone();
+  const app = useAppData();
+  const now = app.clock.now();
+  const tz = app.timeZone();
   return { now, tz, dayStart: dayStart(now, tz), dayEnd: dayEnd(now, tz) };
 }
 
@@ -26,13 +29,17 @@ export function useFolders() {
   const app = useAppData();
   return useQuery({
     queryKey: keys.folders,
-    queryFn: () => app.folders.list(dayEnd(app.ctx.clock.now(), app.ctx.timeZone())),
+    queryFn: () => app.folders.list(dayEnd(app.clock.now(), app.timeZone())),
   });
 }
 
-export function useFolder(id: string) {
+export function useFolder(id: string | null) {
   const app = useAppData();
-  return useQuery({ queryKey: keys.folder(id), queryFn: () => app.folders.get(id) });
+  return useQuery({
+    queryKey: keys.folder(id ?? ''),
+    queryFn: () => app.folders.get(id!),
+    enabled: id !== null,
+  });
 }
 
 export function useCards(folderId: string) {
@@ -50,14 +57,15 @@ export function useNextDue(folderId: string | null) {
   const app = useAppData();
   return useQuery({
     queryKey: keys.nextDue(folderId),
-    queryFn: () => app.reviews.nextDueFrom(folderId, dayEnd(app.ctx.clock.now(), app.ctx.timeZone())),
+    queryFn: () => app.reviews.nextDueFrom(folderId, dayEnd(app.clock.now(), app.timeZone())),
   });
 }
 
 export function useMediaUri(rel: string | undefined) {
+  const app = useAppData();
   return useQuery({
     queryKey: keys.media(rel ?? ''),
-    queryFn: () => resolveMediaUri(rel!),
+    queryFn: () => app.images.resolveMediaUri(rel!),
     enabled: !!rel,
     staleTime: Infinity,
   });
@@ -67,14 +75,7 @@ export function useMediaUri(rel: string | undefined) {
 export function useInvalidateAll() {
   const qc = useQueryClient();
   return useCallback(
-    () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: ['folders'] }),
-        qc.invalidateQueries({ queryKey: ['folder'] }),
-        qc.invalidateQueries({ queryKey: ['cards'] }),
-        qc.invalidateQueries({ queryKey: ['card'] }),
-        qc.invalidateQueries({ queryKey: ['nextDue'] }),
-      ]),
+    () => Promise.all(DERIVED_ROOTS.map((root) => qc.invalidateQueries({ queryKey: [root] }))),
     [qc],
   );
 }

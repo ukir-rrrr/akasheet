@@ -1,14 +1,12 @@
-import { router } from 'expo-router';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { prepareImage } from '@/data/media/mediaStore';
-import { saveCard } from '@/data/media/saveCard';
 import type { PreparedImage } from '@/data/media/types';
 import { EMPTY_MASKS_MESSAGE } from '@/data/repos/cardRepo';
 import type { Folder } from '@/data/repos/folderRepo';
 import { useAppData } from '@/features/app/AppDataProvider';
+import { goBackOr } from '@/features/app/navigation';
 import { flash } from '@/features/app/flash';
 import { useFolders, useInvalidateAll } from '@/features/app/queries';
 import { pendingImage, type PickedImage } from '@/features/cards/pickImage';
@@ -27,26 +25,20 @@ const HINT_KEY = 'zoom_hint_shown';
 const HINT_TIMES = 3;
 
 function useZoomHint(): boolean {
-  const { db } = useAppData();
+  const { meta } = useAppData();
   const [show, setShow] = useState(false);
   useEffect(() => {
     let alive = true;
-    (async () => {
-      const row = await db.get<{ value: string }>('SELECT value FROM app_meta WHERE key = ?', [HINT_KEY]);
-      const n = Number(row?.value ?? 0);
-      if (n >= HINT_TIMES) return;
-      if (alive) setShow(true);
-      await db.run(
-        'INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-        [HINT_KEY, String(n + 1)],
-      );
-    })().catch(() => undefined);
+    meta
+      .bumpCounter(HINT_KEY, HINT_TIMES)
+      .then((first) => alive && first && setShow(true))
+      .catch(() => undefined);
     const t = setTimeout(() => alive && setShow(false), 4000);
     return () => {
       alive = false;
       clearTimeout(t);
     };
-  }, [db]);
+  }, [meta]);
   return show;
 }
 
@@ -74,10 +66,11 @@ export function CardEditorScreen({ initialFolderId }: { initialFolderId?: string
 
   useEffect(() => {
     if (!picked) return;
-    prepareImage(picked.uri)
+    app.images
+      .prepareImage(picked.uri)
       .then(setPrepared)
       .catch((e) => setPrepError(errorMessage(e)));
-  }, [picked]);
+  }, [picked, app]);
 
   const close = async () => {
     if (state.dirty) {
@@ -89,23 +82,24 @@ export function CardEditorScreen({ initialFolderId }: { initialFolderId?: string
       });
       if (!ok) return;
     }
-    if (router.canGoBack()) router.back();
-    else router.replace('/');
+    goBackOr('/');
   };
 
   const chooseFolder = async () => {
-    const choice = await dialogs.sheet({
+    const NEW = { kind: 'new' } as const;
+    const choice = await dialogs.sheet<string | typeof NEW>({
       title: '保存先のフォルダ',
       actions: [
         ...folderList.map((f) => ({
+          value: f.id,
           label: f.name,
           icon: f.id === folder?.id ? ('checkmark' as const) : undefined,
         })),
-        { label: '新しいフォルダ', icon: 'add' as const },
+        { value: NEW, label: '新しいフォルダ', icon: 'add' as const },
       ],
     });
     if (choice === null) return;
-    if (choice < folderList.length) setFolderId(folderList[choice].id);
+    if (typeof choice === 'string') setFolderId(choice);
     else {
       const f = await createFolder();
       if (f) setFolderId(f.id);
@@ -132,7 +126,7 @@ export function CardEditorScreen({ initialFolderId }: { initialFolderId?: string
     }
     setSaving(true);
     try {
-      await saveCard(app.cards, {
+      await app.saveCard({
         folderId: target.id,
         image: prepared,
         masks: state.masks.map((m) => m.geometry),
@@ -149,8 +143,7 @@ export function CardEditorScreen({ initialFolderId }: { initialFolderId?: string
         onAction: () => startCard(picked.source, savedFolderId),
         durationMs: 4000,
       });
-      if (router.canGoBack()) router.back();
-      else router.replace({ pathname: '/folders/[folderId]', params: { folderId: target.id } });
+      goBackOr({ pathname: '/folders/[folderId]', params: { folderId: savedFolderId } });
     } catch (e) {
       await dialogs.alert('保存できませんでした', `${errorMessage(e)}\n編集内容はそのまま残っています。`);
     } finally {
@@ -170,12 +163,7 @@ export function CardEditorScreen({ initialFolderId }: { initialFolderId?: string
             {prepError}
           </AppText>
         )}
-        <Button
-          label="戻る"
-          kind="secondary"
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-          style={{ marginTop: 20 }}
-        />
+        <Button label="戻る" kind="secondary" onPress={() => goBackOr('/')} style={{ marginTop: 20 }} />
       </View>
     );
   }

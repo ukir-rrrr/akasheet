@@ -2,10 +2,13 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { errorMessage } from '@/shared/errors';
+
 import { AppText, Button, Icon, PressableScale, type IconName } from './primitives';
 import { heights, radius, useTheme } from './theme';
 
-export type SheetAction = {
+export type SheetAction<T> = {
+  value: T;
   label: string;
   icon?: IconName;
   destructive?: boolean;
@@ -13,13 +16,13 @@ export type SheetAction = {
   testID?: string;
 };
 
-type SheetRequest = {
-  kind: 'sheet';
+export type SheetOptions<T> = {
   title?: string;
   message?: string;
-  actions: SheetAction[];
+  actions: SheetAction<T>[];
   cancelLabel?: string;
 };
+type SheetRequest = SheetOptions<unknown> & { kind: 'sheet' };
 type PromptRequest = {
   kind: 'prompt';
   title: string;
@@ -30,12 +33,12 @@ type PromptRequest = {
   validate?: (v: string) => string | null;
 };
 type Request =
-  | (SheetRequest & { resolve: (i: number | null) => void })
+  | (SheetRequest & { resolve: (v: unknown) => void })
   | (PromptRequest & { resolve: (v: string | null) => void });
 
-type DialogApi = {
-  /** Resolves with the chosen action index, or null when cancelled. */
-  sheet: (r: Omit<SheetRequest, 'kind'>) => Promise<number | null>;
+export type DialogApi = {
+  /** Resolves with the chosen action's value, or null when cancelled. */
+  sheet: <T>(r: SheetOptions<T>) => Promise<T | null>;
   confirm: (r: {
     title: string;
     message?: string;
@@ -44,6 +47,8 @@ type DialogApi = {
   }) => Promise<boolean>;
   alert: (title: string, message?: string) => Promise<void>;
   prompt: (r: Omit<PromptRequest, 'kind'>) => Promise<string | null>;
+  /** Runs `fn`; on failure shows `title` with the error message and resolves null. */
+  attempt: <T>(title: string, fn: () => Promise<T>) => Promise<T | null>;
 };
 
 const DialogContext = createContext<DialogApi | null>(null);
@@ -58,28 +63,39 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const [req, setReq] = useState<Request | null>(null);
 
   const api = useMemo<DialogApi>(() => {
-    const sheet: DialogApi['sheet'] = (r) =>
-      new Promise((resolve) => setReq({ kind: 'sheet', ...r, resolve }));
+    const sheet = <T,>(r: SheetOptions<T>) =>
+      new Promise<T | null>((resolve) =>
+        setReq({ kind: 'sheet', ...r, resolve: (v) => resolve(v as T | null) }),
+      );
+    const alert: DialogApi['alert'] = async (title, message) => {
+      await sheet({ title, message, actions: [], cancelLabel: 'OK' });
+    };
     return {
       sheet,
       confirm: async ({ title, message, confirmLabel, destructive }) =>
         (await sheet({
           title,
           message,
-          actions: [{ label: confirmLabel, destructive, testID: 'dialog-confirm' }],
-        })) === 0,
-      alert: async (title, message) => {
-        await sheet({ title, message, actions: [], cancelLabel: 'OK' });
-      },
+          actions: [{ value: true, label: confirmLabel, destructive, testID: 'dialog-confirm' }],
+        })) === true,
+      alert,
       prompt: (r) => new Promise((resolve) => setReq({ kind: 'prompt', ...r, resolve })),
+      attempt: async (title, fn) => {
+        try {
+          return await fn();
+        } catch (e) {
+          await alert(title, errorMessage(e));
+          return null;
+        }
+      },
     };
   }, []);
 
   const close = useCallback(
-    (value: number | string | null) => {
+    (value: unknown) => {
       if (!req) return;
       setReq(null);
-      (req.resolve as (v: number | string | null) => void)(value);
+      (req.resolve as (v: unknown) => void)(value);
     },
     [req],
   );
@@ -95,7 +111,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   );
 }
 
-function SheetView({ req, onClose }: { req: SheetRequest; onClose: (v: number | null) => void }) {
+function SheetView({ req, onClose }: { req: SheetRequest; onClose: (v: unknown) => void }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   return (
@@ -118,12 +134,12 @@ function SheetView({ req, onClose }: { req: SheetRequest; onClose: (v: number | 
             )}
           </View>
         )}
-        {req.actions.map((a, i) => (
+        {req.actions.map((a) => (
           <PressableScale
             key={a.label}
             testID={a.testID}
             accessibilityRole="button"
-            onPress={() => onClose(i)}
+            onPress={() => onClose(a.value)}
             style={[styles.action, { borderTopColor: c.line }]}
           >
             <AppText color={a.destructive ? c.shuInk : c.ink} style={{ flex: 1 }}>

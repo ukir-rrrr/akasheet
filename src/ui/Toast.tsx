@@ -22,13 +22,15 @@ export type ToastSpec = {
 };
 
 /** Ink toast with an optional action and a bottom bar that shrinks over the toast's lifetime. */
+export type ToastEnd = 'timeout' | 'action';
+
 export function Toast({
   spec,
   onDone,
   bottom = 16,
 }: {
   spec: ToastSpec | null;
-  onDone: () => void;
+  onDone: (reason: ToastEnd) => void;
   bottom?: number;
 }) {
   const { c } = useTheme();
@@ -44,7 +46,7 @@ export function Toast({
     if (id === undefined) return;
     progress.value = 1;
     progress.value = withTiming(0, { duration: ms, easing: Easing.linear });
-    const timer = setTimeout(() => doneRef.current(), ms);
+    const timer = setTimeout(() => doneRef.current('timeout'), ms);
     return () => {
       clearTimeout(timer);
       cancelAnimation(progress);
@@ -73,7 +75,7 @@ export function Toast({
               accessibilityRole="button"
               onPress={() => {
                 spec.onAction?.();
-                onDone();
+                onDone('action');
               }}
               style={[styles.action, { borderColor: c.ink3 }]}
             >

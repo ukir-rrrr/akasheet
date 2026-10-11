@@ -35,14 +35,11 @@ export function useFolderActions() {
           validate: nameError,
         }));
       if (name === null) return null;
-      try {
+      return dialogs.attempt('作成できませんでした', async () => {
         const folder = await app.folders.create(name);
         await invalidate();
         return folder;
-      } catch (e) {
-        await dialogs.alert('作成できませんでした', errorMessage(e));
-        return null;
-      }
+      });
     },
     [app, dialogs, invalidate],
   );
@@ -56,8 +53,10 @@ export function useFolderActions() {
         validate: nameError,
       });
       if (name === null) return;
-      await app.folders.rename(folder.id, name);
-      await invalidate();
+      await dialogs.attempt('名前を変更できませんでした', async () => {
+        await app.folders.rename(folder.id, name);
+        await invalidate();
+      });
     },
     [app, dialogs, invalidate],
   );
@@ -72,9 +71,12 @@ export function useFolderActions() {
         destructive: true,
       });
       if (!ok) return false;
-      await app.folders.remove(folder.id);
-      await invalidate();
-      return true;
+      const done = await dialogs.attempt('削除できませんでした', async () => {
+        await app.folders.remove(folder.id);
+        await invalidate();
+        return true;
+      });
+      return done === true;
     },
     [app, dialogs, invalidate],
   );
@@ -85,8 +87,9 @@ export function useFolderActions() {
       const choice = await dialogs.sheet({
         title: folder.name,
         actions: [
-          { label: '名前を変更', icon: 'pencil-outline', testID: 'menu-rename' },
+          { value: 'rename' as const, label: '名前を変更', icon: 'pencil-outline', testID: 'menu-rename' },
           {
+            value: 'delete' as const,
             label: '削除',
             icon: 'trash-outline',
             destructive: true,
@@ -95,8 +98,8 @@ export function useFolderActions() {
           },
         ],
       });
-      if (choice === 0) await renameFolder(folder);
-      if (choice === 1 && (await deleteFolder(folder, cardCount))) return 'deleted';
+      if (choice === 'rename') await renameFolder(folder);
+      if (choice === 'delete' && (await deleteFolder(folder, cardCount))) return 'deleted';
       return null;
     },
     [dialogs, renameFolder, deleteFolder],
@@ -104,7 +107,7 @@ export function useFolderActions() {
 
   const startCard = useCallback(
     async (source: PickSource, folderId?: string) => {
-      const picked = await pickImage(source, dialogs);
+      const picked = await dialogs.attempt('写真を読み込めませんでした', () => pickImage(source, dialogs));
       if (!picked) return;
       pendingImage.set(picked);
       router.push(folderId ? { pathname: '/cards/new', params: { folderId } } : '/cards/new');
@@ -114,16 +117,16 @@ export function useFolderActions() {
 
   const chooseSourceAndStart = useCallback(
     async (folderId?: string) => {
-      const choice = await dialogs.sheet({
+      const source = await dialogs.sheet<PickSource>({
         title: '写真からはじめる',
         actions: [
-          { label: '撮る', icon: 'camera-outline' },
-          { label: '写真を選ぶ', icon: 'images-outline' },
-          { label: 'サンプルの教科書ページ', icon: 'book-outline', testID: 'source-sample' },
+          { value: 'camera', label: '撮る', icon: 'camera-outline' },
+          { value: 'library', label: '写真を選ぶ', icon: 'images-outline' },
+          { value: 'sample', label: 'サンプルの教科書ページ', icon: 'book-outline', testID: 'source-sample' },
         ],
       });
-      if (choice === null) return;
-      await startCard((['camera', 'library', 'sample'] as const)[choice], folderId);
+      if (source === null) return;
+      await startCard(source, folderId);
     },
     [dialogs, startCard],
   );

@@ -1,5 +1,5 @@
 import { Canvas, Group, Image, useImage } from '@shopify/react-native-skia';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
@@ -34,7 +34,7 @@ export function ReviewCanvas({
   const uri = useMediaUri(rel);
   const image = useImage(uri.data ?? null);
   const { view, fit, zp, onLayout, pinch, doubleTap } = useZoomPan(img);
-  const [layerMasks] = useState(() => toLayerMasks(masks));
+  const layerMasks = useMemo(() => toLayerMasks(masks), [masks]);
   const paths = useMaskPaths(layerMasks, img);
   const [pressedId, setPressedId] = useState<string | null>(null);
   const scale = fit ? fit.s0 * zp.k : 1;

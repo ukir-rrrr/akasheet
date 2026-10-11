@@ -57,6 +57,29 @@ module.exports = defineConfig([
     },
   },
   {
+    files: ['src/features/**/*.{ts,tsx}', 'src/ui/**/*.{ts,tsx}', 'src/app/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@/data/db/*',
+                '!@/data/db/client',
+                '@/data/media/*',
+                '!@/data/media/types',
+                '@/data/services',
+                '@/data/repos/context',
+              ],
+              message: 'UI code goes through AppData (useAppData); do not reach into the driver or storage.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.test.ts', 'e2e/**/*.ts', 'scripts/**/*.js', '*.config.js'],
     rules: { 'no-console': 'off' },
   },

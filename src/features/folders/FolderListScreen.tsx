@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FolderSummary } from '@/data/repos/folderRepo';
 import { flash, useFlash } from '@/features/app/flash';
 import { useFolders, useNextDue, useToday } from '@/features/app/queries';
+import { ALL_FOLDERS } from '@/features/review/ReviewScreen';
 import { CaptureDock } from '@/ui/Dock';
 import { formatCount, formatHeaderDate, formatRelativeDay, formatShortDate } from '@/ui/format';
 import {
@@ -79,7 +80,13 @@ export function FolderListScreen() {
                   {dueFolders}フォルダ・約{Math.max(1, Math.ceil((totalDue * SECONDS_PER_CARD) / 60))}分
                 </AppText>
               </View>
-              <Button label="まとめて復習 ›" onPress={() => router.push('/review/all')} testID="review-all" />
+              <Button
+                label="まとめて復習 ›"
+                onPress={() =>
+                  router.push({ pathname: '/review/[folderId]', params: { folderId: ALL_FOLDERS } })
+                }
+                testID="review-all"
+              />
             </View>
           ) : (
             <View style={{ marginTop: 8 }}>
