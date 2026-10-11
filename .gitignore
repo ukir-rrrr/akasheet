@@ -49,3 +49,4 @@ playwright-report/
 uploads/
 agent-tools/
 terminals/
+public/canvaskit.wasm

@@ -1,6 +1,6 @@
 {
   "name": "mekuru",
-  "main": "expo-router/entry",
+  "main": "index",
   "version": "1.0.0",
   "dependencies": {
     "@shopify/react-native-skia": "2.6.2",
@@ -62,7 +62,8 @@
     "test:coverage": "jest --coverage",
     "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test:coverage",
     "e2e": "playwright test",
-    "prepare": "husky"
+    "prepare": "husky",
+    "postinstall": "node scripts/copy-canvaskit.js"
   },
   "private": true
 }
