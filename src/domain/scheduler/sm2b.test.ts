@@ -25,7 +25,8 @@ describe('sm2b golden vectors (DESIGN §6.5)', () => {
       s = sm2b.next(s, step.rating as Rating, { now: t(step.at), tz: v.tz });
       for (const [key, value] of Object.entries(step.expect)) {
         const actual = s[key as keyof ReviewState];
-        if (key === 'dueAt') expect(new Date(actual as number).toISOString()).toBe(new Date(t(value as string)).toISOString());
+        if (key === 'dueAt')
+          expect(new Date(actual as number).toISOString()).toBe(new Date(t(value as string)).toISOString());
         else if (key === 'ease') expect(actual).toBeCloseTo(value as number, 10);
         else expect(actual).toBe(value);
       }
@@ -51,7 +52,15 @@ describe('sm2b behavior', () => {
   });
 
   it('keeps interval and reps on まだ and records lastReviewedAt', () => {
-    const s: ReviewState = { phase: 'review', dueAt: now, intervalDays: 20, ease: 2.5, reps: 4, lapses: 0, lastReviewedAt: null };
+    const s: ReviewState = {
+      phase: 'review',
+      dueAt: now,
+      intervalDays: 20,
+      ease: 2.5,
+      reps: 4,
+      lapses: 0,
+      lastReviewedAt: null,
+    };
     const n = sm2b.next(s, 1, { now, tz });
     expect(n.intervalDays).toBe(20);
     expect(n.reps).toBe(4);
@@ -59,13 +68,29 @@ describe('sm2b behavior', () => {
   });
 
   it('does not touch ease/lapses on repeated relearning まだ', () => {
-    const s: ReviewState = { phase: 'relearning', dueAt: now, intervalDays: 20, ease: 2.1, reps: 4, lapses: 2, lastReviewedAt: null };
+    const s: ReviewState = {
+      phase: 'relearning',
+      dueAt: now,
+      intervalDays: 20,
+      ease: 2.1,
+      reps: 4,
+      lapses: 2,
+      lastReviewedAt: null,
+    };
     const n = sm2b.next(s, 1, { now, tz });
     expect(n).toMatchObject({ phase: 'relearning', ease: 2.1, lapses: 2 });
   });
 
   it('relearning with interval ≥ 6 resumes at reps 2', () => {
-    const s: ReviewState = { phase: 'relearning', dueAt: now, intervalDays: 6, ease: 2.3, reps: 5, lapses: 1, lastReviewedAt: null };
+    const s: ReviewState = {
+      phase: 'relearning',
+      dueAt: now,
+      intervalDays: 6,
+      ease: 2.3,
+      reps: 5,
+      lapses: 1,
+      lastReviewedAt: null,
+    };
     expect(sm2b.next(s, 3, { now, tz })).toMatchObject({ intervalDays: 3, reps: 2 });
   });
 
@@ -78,23 +103,27 @@ describe('sm2b behavior', () => {
 
   it('invariants hold for arbitrary rating sequences', () => {
     fc.assert(
-      fc.property(fc.array(fc.constantFrom<Rating>(1, 3), { minLength: 1, maxLength: 60 }), fc.integer({ min: 0, max: 2 ** 31 }), (ratings, seed) => {
-        let s = sm2b.initial(now);
-        let clock = now;
-        const rng = mulberry32(seed);
-        for (const r of ratings) {
-          const prev = s;
-          s = sm2b.next(s, r, { now: clock, tz, rng });
-          expect(s.ease).toBeGreaterThanOrEqual(SM2B.EF_MIN);
-          expect(s.intervalDays).toBeLessThanOrEqual(SM2B.MAX_INTERVAL);
-          expect(s.dueAt).toBeGreaterThan(clock);
-          if (r === 1) {
-            expect(s.intervalDays).toBe(prev.intervalDays);
-            if (prev.phase !== 'review') expect(s.lapses).toBe(prev.lapses);
+      fc.property(
+        fc.array(fc.constantFrom<Rating>(1, 3), { minLength: 1, maxLength: 60 }),
+        fc.integer({ min: 0, max: 2 ** 31 }),
+        (ratings, seed) => {
+          let s = sm2b.initial(now);
+          let clock = now;
+          const rng = mulberry32(seed);
+          for (const r of ratings) {
+            const prev = s;
+            s = sm2b.next(s, r, { now: clock, tz, rng });
+            expect(s.ease).toBeGreaterThanOrEqual(SM2B.EF_MIN);
+            expect(s.intervalDays).toBeLessThanOrEqual(SM2B.MAX_INTERVAL);
+            expect(s.dueAt).toBeGreaterThan(clock);
+            if (r === 1) {
+              expect(s.intervalDays).toBe(prev.intervalDays);
+              if (prev.phase !== 'review') expect(s.lapses).toBe(prev.lapses);
+            }
+            clock = Math.max(clock + 1, s.dueAt);
           }
-          clock = Math.max(clock + 1, s.dueAt);
-        }
-      }),
+        },
+      ),
     );
   });
 });
@@ -107,11 +136,15 @@ describe('fuzz', () => {
 
   it('stays within ±5% and is deterministic per card+time', () => {
     fc.assert(
-      fc.property(fc.integer({ min: 3, max: 3650 }), fc.double({ min: 0, max: 0.999999, noNaN: true }), (i, r) => {
-        const f = fuzzInterval(i, () => r);
-        expect(f).toBeGreaterThanOrEqual(Math.round(i * 0.95));
-        expect(f).toBeLessThanOrEqual(Math.min(3650, Math.round(i * 1.05)));
-      }),
+      fc.property(
+        fc.integer({ min: 3, max: 3650 }),
+        fc.double({ min: 0, max: 0.999999, noNaN: true }),
+        (i, r) => {
+          const f = fuzzInterval(i, () => r);
+          expect(f).toBeGreaterThanOrEqual(Math.round(i * 0.95));
+          expect(f).toBeLessThanOrEqual(Math.min(3650, Math.round(i * 1.05)));
+        },
+      ),
     );
     expect(reviewRng('a', 1)()).toBe(reviewRng('a', 1)());
     expect(reviewRng('a', 1)()).not.toBe(reviewRng('a', 2)());
@@ -120,7 +153,15 @@ describe('fuzz', () => {
   it('stores the unfuzzed interval', () => {
     const tz = 'Asia/Tokyo';
     const now = t('2026-10-11T13:00:00+09:00');
-    const s: ReviewState = { phase: 'review', dueAt: now, intervalDays: 100, ease: 2.5, reps: 5, lapses: 0, lastReviewedAt: null };
+    const s: ReviewState = {
+      phase: 'review',
+      dueAt: now,
+      intervalDays: 100,
+      ease: 2.5,
+      reps: 5,
+      lapses: 0,
+      lastReviewedAt: null,
+    };
     const n = sm2b.next(s, 3, { now, tz, rng: () => 0.999 });
     expect(n.intervalDays).toBe(250);
     expect(studyDaysBetween(now, n.dueAt, tz)).toBe(262);
@@ -161,7 +202,14 @@ describe('day boundaries', () => {
   });
 
   it('reads wall clock in UTC', () => {
-    expect(wallClock(t('2026-10-11T00:00:00Z'), 'UTC')).toEqual({ y: 2026, m: 10, d: 11, h: 0, min: 0, s: 0 });
+    expect(wallClock(t('2026-10-11T00:00:00Z'), 'UTC')).toEqual({
+      y: 2026,
+      m: 10,
+      d: 11,
+      h: 0,
+      min: 0,
+      s: 0,
+    });
   });
 
   it('counts study days', () => {

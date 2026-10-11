@@ -140,7 +140,18 @@ export function createReviewRepo(ctx: RepoContext, scheduler: Scheduler = sm2b) 
         await tx.run(
           `UPDATE review_states SET algorithm = ?, phase = ?, due_at = ?, interval_days = ?, ease = ?, reps = ?, lapses = ?,
              last_reviewed_at = ?, updated_at = ? WHERE card_id = ?`,
-          [scheduler.id, next.phase, next.dueAt, next.intervalDays, next.ease, next.reps, next.lapses, now, now, input.cardId],
+          [
+            scheduler.id,
+            next.phase,
+            next.dueAt,
+            next.intervalDays,
+            next.ease,
+            next.reps,
+            next.lapses,
+            now,
+            now,
+            input.cardId,
+          ],
         );
         return { logId, prev, next };
       });
@@ -196,7 +207,9 @@ export function createReviewRepo(ctx: RepoContext, scheduler: Scheduler = sm2b) 
 
     /** Rebuilds a card's state by replaying non-undone logs with their recorded time zones. */
     async replay(cardId: string): Promise<ReviewState> {
-      const card = await db.get<{ created_at: number }>('SELECT created_at FROM cards WHERE id = ?', [cardId]);
+      const card = await db.get<{ created_at: number }>('SELECT created_at FROM cards WHERE id = ?', [
+        cardId,
+      ]);
       if (!card) throw new ValidationError('カードが見つかりません');
       const logs = await db.all<{ reviewed_at: number; time_zone: string; rating: Rating }>(
         'SELECT reviewed_at, time_zone, rating FROM review_logs WHERE card_id = ? AND undone_at IS NULL ORDER BY reviewed_at, id',
@@ -204,7 +217,11 @@ export function createReviewRepo(ctx: RepoContext, scheduler: Scheduler = sm2b) 
       );
       let s = scheduler.initial(card.created_at);
       for (const l of logs) {
-        s = scheduler.next(s, l.rating, { now: l.reviewed_at, tz: l.time_zone, rng: reviewRng(cardId, l.reviewed_at) });
+        s = scheduler.next(s, l.rating, {
+          now: l.reviewed_at,
+          tz: l.time_zone,
+          rng: reviewRng(cardId, l.reviewed_at),
+        });
       }
       return s;
     },

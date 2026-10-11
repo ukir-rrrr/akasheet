@@ -4,60 +4,70 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 
 import { MissingAssetError, StorageError } from '@/shared/errors';
 
-import { fitLongSide, JPEG_QUALITY, MAX_LONG_SIDE, mediaPaths, THUMB_LONG_SIDE, THUMB_QUALITY, toHex, type ImportedMedia } from './types';
+import {
+  fitLongSide,
+  JPEG_QUALITY,
+  MAX_LONG_SIDE,
+  mediaPaths,
+  THUMB_LONG_SIDE,
+  THUMB_QUALITY,
+  toHex,
+  type ImportedMedia,
+  type PreparedImage,
+} from './types';
 
 async function render(uri: string, maxSide: number, quality: number) {
-  const ctx = ImageManipulator.manipulate(uri);
-  let ref = await ctx.renderAsync();
+  let ref = await ImageManipulator.manipulate(uri).renderAsync();
   const resize = fitLongSide(ref.width, ref.height, maxSide);
-  if (resize) {
-    ctx.resize(resize);
-    ref = await ctx.renderAsync();
-  }
+  // A fresh context per pass: re-rendering a context fails on web.
+  if (resize) ref = await ImageManipulator.manipulate(uri).resize(resize).renderAsync();
   return ref.saveAsync({ format: SaveFormat.JPEG, compress: quality });
+}
+
+/**
+ * Bakes EXIF orientation (the manipulator renders an upright bitmap), caps the long side at 2048px and
+ * re-encodes JPEG 0.85 into the cache directory. Only the output dimensions are used from here on.
+ */
+export async function prepareImage(sourceUri: string): Promise<PreparedImage> {
+  const out = await render(sourceUri, MAX_LONG_SIDE, JPEG_QUALITY);
+  return { uri: out.uri, width: out.width, height: out.height };
 }
 
 async function place(srcUri: string, rel: string): Promise<boolean> {
   const dest = new File(Paths.document, rel);
-  const src = new File(srcUri);
-  if (dest.exists) {
-    src.delete();
-    return false;
-  }
+  if (dest.exists) return false;
   const dir = dest.parentDirectory;
   if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
-  await src.move(dest);
+  await new File(srcUri).copy(dest);
   return true;
 }
 
-/**
- * Bakes EXIF orientation (the manipulator renders an upright bitmap), caps the long side at 2048px,
- * re-encodes JPEG 0.85, writes a 512px thumbnail, and stores both content-addressed under documentDirectory.
- */
-export async function importImage(uri: string): Promise<ImportedMedia> {
-  const main = await render(uri, MAX_LONG_SIDE, JPEG_QUALITY);
-  const bytes = await new File(main.uri).bytes();
+/** Writes the prepared image and a 512px thumbnail content-addressed under documentDirectory. */
+export async function persistImage(img: PreparedImage): Promise<ImportedMedia> {
+  const bytes = await new File(img.uri).bytes();
   if (Paths.availableDiskSpace < bytes.byteLength * 3) {
-    throw new StorageError('端末の空き容量が足りません。不要なファイルを削除してからもう一度お試しください。');
+    throw new StorageError(
+      '端末の空き容量が足りません。不要なファイルを削除してからもう一度お試しください。',
+    );
   }
   const sha256 = toHex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes));
   const { path, thumbPath } = mediaPaths(sha256);
-  const thumb = await render(main.uri, THUMB_LONG_SIDE, THUMB_QUALITY);
-  const freshMain = await place(main.uri, path);
+  const thumb = await render(img.uri, THUMB_LONG_SIDE, THUMB_QUALITY);
+  const freshMain = await place(img.uri, path);
   const freshThumb = await place(thumb.uri, thumbPath);
   return {
     sha256,
     path,
     thumbPath,
     mime: 'image/jpeg',
-    width: main.width,
-    height: main.height,
+    width: img.width,
+    height: img.height,
     byteSize: bytes.byteLength,
     fresh: freshMain || freshThumb,
   };
 }
 
-export async function discardImport(m: ImportedMedia): Promise<void> {
+export async function discardPersisted(m: ImportedMedia): Promise<void> {
   if (!m.fresh) return;
   for (const rel of [m.path, m.thumbPath]) {
     const f = new File(Paths.document, rel);

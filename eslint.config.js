@@ -2,6 +2,7 @@
 const { defineConfig } = require('eslint/config');
 const expoConfig = require('eslint-config-expo/flat');
 const prettierConfig = require('eslint-config-prettier');
+const globals = require('globals');
 
 const banClock = {
   selector:
@@ -13,7 +14,16 @@ module.exports = defineConfig([
   expoConfig,
   prettierConfig,
   {
-    ignores: ['dist/*', 'node_modules/*', '.expo/*', 'coverage/*', 'test-results/*', 'playwright-report/*', 'public/*', 'uploads/*'],
+    ignores: [
+      'dist/*',
+      'node_modules/*',
+      '.expo/*',
+      'coverage/*',
+      'test-results/*',
+      'playwright-report/*',
+      'public/*',
+      'uploads/*',
+    ],
   },
   {
     files: ['**/*.{ts,tsx,js}'],
@@ -33,8 +43,14 @@ module.exports = defineConfig([
         'error',
         {
           patterns: [
-            { group: ['react', 'react-*', 'react-native*', 'expo', 'expo-*', '@shopify/*'], message: 'src/domain must stay platform-independent.' },
-            { group: ['@/data/*', '@/features/*', '@/ui/*', '@/app/*'], message: 'src/domain must not depend on outer layers.' },
+            {
+              group: ['react', 'react-*', 'react-native*', 'expo', 'expo-*', '@shopify/*'],
+              message: 'src/domain must stay platform-independent.',
+            },
+            {
+              group: ['@/data/*', '@/features/*', '@/ui/*', '@/app/*'],
+              message: 'src/domain must not depend on outer layers.',
+            },
           ],
         },
       ],
@@ -43,5 +59,13 @@ module.exports = defineConfig([
   {
     files: ['**/*.test.ts', 'e2e/**/*.ts', 'scripts/**/*.js', '*.config.js'],
     rules: { 'no-console': 'off' },
+  },
+  {
+    files: ['**/*.test.ts'],
+    rules: { 'import/no-named-as-default-member': 'off' },
+  },
+  {
+    files: ['scripts/**/*.js', '*.config.js'],
+    languageOptions: { globals: globals.node },
   },
 ]);

@@ -71,8 +71,13 @@ describe('migrations', () => {
     const { db, folders } = await setup();
     await folders.create('日本史');
     const backups: number[] = [];
-    const next = [...MIGRATIONS, { version: 2, name: 'test', sql: 'ALTER TABLE folders ADD COLUMN icon TEXT;' }];
-    expect(await migrate(db, { migrations: next, beforeMigrate: async (v) => void backups.push(v) })).toEqual([2]);
+    const next = [
+      ...MIGRATIONS,
+      { version: 2, name: 'test', sql: 'ALTER TABLE folders ADD COLUMN icon TEXT;' },
+    ];
+    expect(await migrate(db, { migrations: next, beforeMigrate: async (v) => void backups.push(v) })).toEqual(
+      [2],
+    );
     expect(backups).toEqual([1]);
     expect(await userVersion(db)).toBe(2);
     expect((await folders.list(0)).map((f) => f.name)).toEqual(['日本史']);
@@ -80,7 +85,10 @@ describe('migrations', () => {
 
   it('rolls back a failing migration without bumping user_version', async () => {
     const { db } = await setup();
-    const bad = [...MIGRATIONS, { version: 2, name: 'bad', sql: 'CREATE TABLE x (a INT); SELECT * FROM nope;' }];
+    const bad = [
+      ...MIGRATIONS,
+      { version: 2, name: 'bad', sql: 'CREATE TABLE x (a INT); SELECT * FROM nope;' },
+    ];
     await expect(migrate(db, { migrations: bad })).rejects.toThrow();
     expect(await userVersion(db)).toBe(1);
     expect(await db.get("SELECT name FROM sqlite_master WHERE name = 'x'")).toBeNull();
@@ -89,13 +97,23 @@ describe('migrations', () => {
   it('enforces ease >= 1.3 with a CHECK constraint', async () => {
     const { db, folders, cards } = await setup();
     const f = await folders.create('x');
-    const { cardId } = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
-    await expect(db.run('UPDATE review_states SET ease = 1.29 WHERE card_id = ?', [cardId])).rejects.toThrow(/CHECK/);
+    const { cardId } = await cards.create({
+      folderId: f.id,
+      media: media(),
+      masks: [rect],
+      source: 'library',
+    });
+    await expect(db.run('UPDATE review_states SET ease = 1.29 WHERE card_id = ?', [cardId])).rejects.toThrow(
+      /CHECK/,
+    );
   });
 
   it('uses the due index for the due query and has no absolute path columns', async () => {
     const { db } = await setup();
-    const plan = await db.all<{ detail: string }>('EXPLAIN QUERY PLAN SELECT card_id FROM review_states WHERE due_at < ?', [1]);
+    const plan = await db.all<{ detail: string }>(
+      'EXPLAIN QUERY PLAN SELECT card_id FROM review_states WHERE due_at < ?',
+      [1],
+    );
     expect(plan.map((p) => p.detail).join(' ')).toMatch(/idx_review_due/);
     const cols = await db.all<{ name: string }>("SELECT name FROM pragma_table_info('media')");
     expect(cols.map((c) => c.name)).not.toContain('absolute_path');
@@ -125,7 +143,12 @@ describe('folderRepo', () => {
   it('soft-deletes a folder with its cards; logs remain', async () => {
     const { db, folders, cards, reviews, end } = await setup();
     const f = await folders.create('日本史');
-    const { cardId } = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
+    const { cardId } = await cards.create({
+      folderId: f.id,
+      media: media(),
+      masks: [rect],
+      source: 'library',
+    });
     await reviews.answer({ cardId, rating: 3, revealedCount: 1, maskCount: 1, durationMs: 1000 });
     await folders.remove(f.id);
     expect(await folders.list(end())).toEqual([]);
@@ -133,7 +156,9 @@ describe('folderRepo', () => {
     expect(await cards.get(cardId)).toBeNull();
     expect(await reviews.queue(null, Infinity)).toEqual([]);
     expect((await db.get<{ n: number }>('SELECT COUNT(*) AS n FROM review_logs'))?.n).toBe(1);
-    expect((await db.get<{ n: number }>('SELECT COUNT(*) AS n FROM masks WHERE deleted_at IS NULL'))?.n).toBe(0);
+    expect((await db.get<{ n: number }>('SELECT COUNT(*) AS n FROM masks WHERE deleted_at IS NULL'))?.n).toBe(
+      0,
+    );
   });
 });
 
@@ -141,7 +166,13 @@ describe('cardRepo', () => {
   it('saves media+card+masks+state with reading-order ords and reuses media by sha', async () => {
     const { folders, cards, reviews } = await setup();
     const f = await folders.create('日本史');
-    const first = await cards.create({ folderId: f.id, media: media(), masks: [stroke, rect], source: 'camera', title: 'p.48' });
+    const first = await cards.create({
+      folderId: f.id,
+      media: media(),
+      masks: [stroke, rect],
+      source: 'camera',
+      title: 'p.48',
+    });
     const detail = await cards.get(first.cardId);
     expect(detail?.masks.map((m) => m.geometry.shapes[0].t)).toEqual(['rect', 'stroke']);
     expect(detail?.masks.map((m) => m.ord)).toEqual([0, 1]);
@@ -158,16 +189,32 @@ describe('cardRepo', () => {
   it('rejects zero masks, absolute paths and missing folders', async () => {
     const { folders, cards } = await setup();
     const f = await folders.create('x');
-    await expect(cards.create({ folderId: f.id, media: media(), masks: [], source: 'library' })).rejects.toThrow(EMPTY_MASKS_MESSAGE);
     await expect(
-      cards.create({ folderId: f.id, media: { ...media(), path: '/var/mobile/a.jpg' }, masks: [rect], source: 'library' }),
+      cards.create({ folderId: f.id, media: media(), masks: [], source: 'library' }),
+    ).rejects.toThrow(EMPTY_MASKS_MESSAGE);
+    await expect(
+      cards.create({
+        folderId: f.id,
+        media: { ...media(), path: '/var/mobile/a.jpg' },
+        masks: [rect],
+        source: 'library',
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
     await expect(
-      cards.create({ folderId: f.id, media: { ...media(), path: 'file:///a.jpg' }, masks: [rect], source: 'library' }),
+      cards.create({
+        folderId: f.id,
+        media: { ...media(), path: 'file:///a.jpg' },
+        masks: [rect],
+        source: 'library',
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
-    await expect(cards.create({ folderId: 'nope', media: media(), masks: [rect], source: 'library' })).rejects.toThrow(/フォルダ/);
+    await expect(
+      cards.create({ folderId: 'nope', media: media(), masks: [rect], source: 'library' }),
+    ).rejects.toThrow(/フォルダ/);
     const bad = { v: 1, shapes: [{ t: 'rect', x: 2, y: 0, w: 1, h: 1 }] } as unknown as MaskGeometry;
-    await expect(cards.create({ folderId: f.id, media: media(), masks: [bad], source: 'library' })).rejects.toThrow();
+    await expect(
+      cards.create({ folderId: f.id, media: media(), masks: [bad], source: 'library' }),
+    ).rejects.toThrow();
   });
 
   it('leaves nothing behind when the save transaction fails midway', async () => {
@@ -181,9 +228,14 @@ describe('cardRepo', () => {
         return ctx.newId();
       },
     });
-    await expect(failing.create({ folderId: f.id, media: media('b'.repeat(64)), masks: [rect, stroke], source: 'library' })).rejects.toThrow(
-      'disk full',
-    );
+    await expect(
+      failing.create({
+        folderId: f.id,
+        media: media('b'.repeat(64)),
+        masks: [rect, stroke],
+        source: 'library',
+      }),
+    ).rejects.toThrow('disk full');
     for (const table of ['media', 'cards', 'masks', 'review_states']) {
       expect((await db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`))?.n).toBe(0);
     }
@@ -192,8 +244,13 @@ describe('cardRepo', () => {
   it('skips masks with invalid stored geometry but still opens the card', async () => {
     const { db, folders, cards } = await setup();
     const f = await folders.create('x');
-    const { cardId } = await cards.create({ folderId: f.id, media: media(), masks: [rect, stroke], source: 'library' });
-    await db.run("UPDATE masks SET geometry = '{\"v\":9}' WHERE card_id = ? AND ord = 0", [cardId]);
+    const { cardId } = await cards.create({
+      folderId: f.id,
+      media: media(),
+      masks: [rect, stroke],
+      source: 'library',
+    });
+    await db.run('UPDATE masks SET geometry = \'{"v":9}\' WHERE card_id = ? AND ord = 0', [cardId]);
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const detail = await cards.get(cardId);
     expect(detail?.masks).toHaveLength(1);
@@ -206,7 +263,12 @@ describe('cardRepo', () => {
     const { folders, cards, clock, end } = await setup();
     const a = await folders.create('a');
     const b = await folders.create('b');
-    const { cardId, mediaId } = await cards.create({ folderId: a.id, media: media(), masks: [rect], source: 'library' });
+    const { cardId, mediaId } = await cards.create({
+      folderId: a.id,
+      media: media(),
+      masks: [rect],
+      source: 'library',
+    });
     await cards.move([cardId], b.id);
     expect((await folders.list(end())).map((f) => f.cardCount)).toEqual([0, 1]);
     await expect(cards.move([cardId], 'nope')).rejects.toBeInstanceOf(ValidationError);
@@ -227,9 +289,19 @@ describe('reviewRepo', () => {
     const { folders, cards, reviews, clock, end } = await setup();
     const a = await folders.create('a');
     const b = await folders.create('b');
-    const c1 = await cards.create({ folderId: a.id, media: media('1'.repeat(64)), masks: [rect], source: 'library' });
+    const c1 = await cards.create({
+      folderId: a.id,
+      media: media('1'.repeat(64)),
+      masks: [rect],
+      source: 'library',
+    });
     clock.advance(MIN);
-    const c2 = await cards.create({ folderId: b.id, media: media('2'.repeat(64)), masks: [rect], source: 'library' });
+    const c2 = await cards.create({
+      folderId: b.id,
+      media: media('2'.repeat(64)),
+      masks: [rect],
+      source: 'library',
+    });
     await reviews.answer({ cardId: c2.cardId, rating: 1, revealedCount: 0, maskCount: 1, durationMs: null });
     const q = await reviews.queue(null, end());
     expect(q.map((i) => i.cardId)).toEqual([c2.cardId, c1.cardId]);
@@ -240,29 +312,57 @@ describe('reviewRepo', () => {
   it('answers atomically and undo restores the previous state', async () => {
     const { db, folders, cards, reviews, clock } = await setup();
     const f = await folders.create('a');
-    const { cardId } = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
+    const { cardId } = await cards.create({
+      folderId: f.id,
+      media: media(),
+      masks: [rect],
+      source: 'library',
+    });
     const before = await reviews.state(cardId);
     const preview = await reviews.preview(cardId);
     expect(preview[3].intervalDays).toBe(1);
     expect(preview[1].dueAt).toBe(clock.now() + 10 * MIN);
     const res = await reviews.answer({ cardId, rating: 3, revealedCount: 1, maskCount: 1, durationMs: 1200 });
-    expect(res.next).toMatchObject({ phase: 'review', intervalDays: 1, dueAt: Date.parse('2026-10-12T04:00:00+09:00') });
+    expect(res.next).toMatchObject({
+      phase: 'review',
+      intervalDays: 1,
+      dueAt: Date.parse('2026-10-12T04:00:00+09:00'),
+    });
     expect(await reviews.state(cardId)).toEqual(res.next);
     clock.advance(1000);
     await reviews.undo(res.logId);
     expect(await reviews.state(cardId)).toEqual(before);
     await expect(reviews.undo(res.logId)).rejects.toBeInstanceOf(ValidationError);
-    const log = await db.get<{ undone_at: number }>('SELECT undone_at FROM review_logs WHERE id = ?', [res.logId]);
+    const log = await db.get<{ undone_at: number }>('SELECT undone_at FROM review_logs WHERE id = ?', [
+      res.logId,
+    ]);
     expect(log?.undone_at).toBe(clock.now());
   });
 
   it('only allows undoing the latest answer for a card', async () => {
     const { folders, cards, reviews, clock } = await setup();
     const f = await folders.create('a');
-    const { cardId } = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
-    const first = await reviews.answer({ cardId, rating: 1, revealedCount: 0, maskCount: 1, durationMs: null });
+    const { cardId } = await cards.create({
+      folderId: f.id,
+      media: media(),
+      masks: [rect],
+      source: 'library',
+    });
+    const first = await reviews.answer({
+      cardId,
+      rating: 1,
+      revealedCount: 0,
+      maskCount: 1,
+      durationMs: null,
+    });
     clock.advance(10 * MIN);
-    const second = await reviews.answer({ cardId, rating: 3, revealedCount: 1, maskCount: 1, durationMs: null });
+    const second = await reviews.answer({
+      cardId,
+      rating: 3,
+      revealedCount: 1,
+      maskCount: 1,
+      durationMs: null,
+    });
     await expect(reviews.undo(first.logId)).rejects.toThrow(/最新/);
     await reviews.undo(second.logId);
     expect((await reviews.state(cardId)).lastReviewedAt).toBe(T0);
@@ -271,21 +371,41 @@ describe('reviewRepo', () => {
   it('rolls back the log insert when the state update fails', async () => {
     const { db, folders, cards, reviews } = await setup();
     const f = await folders.create('a');
-    const { cardId } = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
-    await db.exec(`CREATE TRIGGER boom BEFORE UPDATE ON review_states BEGIN SELECT RAISE(ABORT, 'boom'); END;`);
-    await expect(reviews.answer({ cardId, rating: 3, revealedCount: 1, maskCount: 1, durationMs: null })).rejects.toThrow('boom');
+    const { cardId } = await cards.create({
+      folderId: f.id,
+      media: media(),
+      masks: [rect],
+      source: 'library',
+    });
+    await db.exec(
+      `CREATE TRIGGER boom BEFORE UPDATE ON review_states BEGIN SELECT RAISE(ABORT, 'boom'); END;`,
+    );
+    await expect(
+      reviews.answer({ cardId, rating: 3, revealedCount: 1, maskCount: 1, durationMs: null }),
+    ).rejects.toThrow('boom');
     expect((await db.get<{ n: number }>('SELECT COUNT(*) AS n FROM review_logs'))?.n).toBe(0);
   });
 
   it('replaying the log reproduces review_states (with fuzz and undo)', async () => {
     const { folders, cards, reviews, clock } = await setup();
     const f = await folders.create('a');
-    const { cardId } = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
+    const { cardId } = await cards.create({
+      folderId: f.id,
+      media: media(),
+      masks: [rect],
+      source: 'library',
+    });
     const ratings: (1 | 3)[] = [3, 3, 3, 3, 1, 3, 3, 1, 1, 3];
     for (const [i, r] of ratings.entries()) {
       const s = await reviews.state(cardId);
       clock.set(Math.max(clock.now() + MIN, s.dueAt + 9 * 3_600_000));
-      const res = await reviews.answer({ cardId, rating: r, revealedCount: 1, maskCount: 1, durationMs: null });
+      const res = await reviews.answer({
+        cardId,
+        rating: r,
+        revealedCount: 1,
+        maskCount: 1,
+        durationMs: null,
+      });
       if (i === 6) {
         clock.advance(1000);
         await reviews.undo(res.logId);
@@ -299,7 +419,12 @@ describe('reviewRepo', () => {
   it('reports the next due time after today', async () => {
     const { folders, cards, reviews, end } = await setup();
     const f = await folders.create('a');
-    const { cardId } = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
+    const { cardId } = await cards.create({
+      folderId: f.id,
+      media: media(),
+      masks: [rect],
+      source: 'library',
+    });
     await reviews.answer({ cardId, rating: 3, revealedCount: 1, maskCount: 1, durationMs: null });
     expect(await reviews.nextDueFrom(null, end())).toBe(Date.parse('2026-10-12T04:00:00+09:00'));
     expect(await reviews.nextDueFrom(f.id, end() + 1)).toBeNull();

@@ -39,12 +39,17 @@ export function currentCard(s: SessionState): string | undefined {
 }
 
 export function toggleReveal(s: SessionState, maskId: string): SessionState {
-  const revealed = s.revealed.includes(maskId) ? s.revealed.filter((m) => m !== maskId) : [...s.revealed, maskId];
+  const revealed = s.revealed.includes(maskId)
+    ? s.revealed.filter((m) => m !== maskId)
+    : [...s.revealed, maskId];
   return { ...s, revealed };
 }
 
 /** Opens the first unrevealed mask in ord order. Returns the opened id (or null) with the new state. */
-export function revealNext(s: SessionState, orderedMaskIds: readonly string[]): [SessionState, string | null] {
+export function revealNext(
+  s: SessionState,
+  orderedMaskIds: readonly string[],
+): [SessionState, string | null] {
   const next = orderedMaskIds.find((id) => !s.revealed.includes(id));
   if (!next) return [s, null];
   return [{ ...s, revealed: [...s.revealed, next] }, next];
@@ -55,7 +60,13 @@ export function revealAll(s: SessionState, maskIds: readonly string[]): SessionS
 }
 
 function core(s: SessionState): Core {
-  return { queue: s.queue, revealed: s.revealed, requeueCount: s.requeueCount, pending: s.pending, answers: s.answers };
+  return {
+    queue: s.queue,
+    revealed: s.revealed,
+    requeueCount: s.requeueCount,
+    pending: s.pending,
+    answers: s.answers,
+  };
 }
 
 /**

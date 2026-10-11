@@ -20,7 +20,8 @@ function toColor(c: string | null): FolderColor {
 export function validateFolderName(name: string): string {
   const trimmed = name.trim();
   if (trimmed.length === 0) throw new ValidationError('フォルダ名を入力してください');
-  if ([...trimmed].length > FOLDER_NAME_MAX) throw new ValidationError(`フォルダ名は${FOLDER_NAME_MAX}文字以内にしてください`);
+  if ([...trimmed].length > FOLDER_NAME_MAX)
+    throw new ValidationError(`フォルダ名は${FOLDER_NAME_MAX}文字以内にしてください`);
   return trimmed;
 }
 
@@ -85,11 +86,10 @@ export function createFolderRepo(ctx: RepoContext) {
 
     async rename(id: string, name: string): Promise<void> {
       const clean = validateFolderName(name);
-      const r = await db.run('UPDATE folders SET name = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL', [
-        clean,
-        clock.now(),
-        id,
-      ]);
+      const r = await db.run(
+        'UPDATE folders SET name = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL',
+        [clean, clock.now(), id],
+      );
       if (r.changes === 0) throw new ValidationError('フォルダが見つかりません');
     },
 
@@ -102,12 +102,14 @@ export function createFolderRepo(ctx: RepoContext) {
            WHERE deleted_at IS NULL AND card_id IN (SELECT id FROM cards WHERE folder_id = ? AND deleted_at IS NULL)`,
           [now, now, id],
         );
-        await tx.run('UPDATE cards SET deleted_at = ?, updated_at = ? WHERE folder_id = ? AND deleted_at IS NULL', [
-          now,
-          now,
-          id,
-        ]);
-        await tx.run('UPDATE folders SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL', [now, now, id]);
+        await tx.run(
+          'UPDATE cards SET deleted_at = ?, updated_at = ? WHERE folder_id = ? AND deleted_at IS NULL',
+          [now, now, id],
+        );
+        await tx.run(
+          'UPDATE folders SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL',
+          [now, now, id],
+        );
       });
     },
   };

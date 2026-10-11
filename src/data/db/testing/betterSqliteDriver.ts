@@ -3,7 +3,9 @@ import Database from 'better-sqlite3';
 import type { SqlDriver, SqlParam } from '../driver';
 
 /** Test-only driver: runs the production SQL against an in-process SQLite. */
-export function createBetterSqliteDriver(filename = ':memory:'): SqlDriver & { raw: Database.Database; close(): void } {
+export function createBetterSqliteDriver(
+  filename = ':memory:',
+): SqlDriver & { raw: Database.Database; close(): void } {
   const raw = new Database(filename);
   raw.pragma('foreign_keys = ON');
   let chain: Promise<unknown> = Promise.resolve();

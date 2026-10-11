@@ -58,5 +58,11 @@ export async function openAppData(): Promise<AppData> {
     deviceId: await loadDeviceId(db, newId),
     timeZone: deviceTimeZone,
   };
-  return { db, ctx, folders: createFolderRepo(ctx), cards: createCardRepo(ctx), reviews: createReviewRepo(ctx) };
+  return {
+    db,
+    ctx,
+    folders: createFolderRepo(ctx),
+    cards: createCardRepo(ctx),
+    reviews: createReviewRepo(ctx),
+  };
 }

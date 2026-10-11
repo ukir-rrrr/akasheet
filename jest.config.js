@@ -5,7 +5,14 @@ module.exports = {
   testMatch: ['**/*.test.ts'],
   transform: { '^.+\\.[jt]sx?$': 'babel-jest' },
   moduleNameMapper: { '^@/(.*)$': '<rootDir>/src/$1' },
-  collectCoverageFrom: ['src/domain/**/*.ts', 'src/data/**/*.ts', '!src/**/*.test.ts', '!src/data/db/expoDriver.ts', '!src/data/db/client.ts', '!src/data/media/**'],
+  collectCoverageFrom: [
+    'src/domain/**/*.ts',
+    'src/data/**/*.ts',
+    '!src/**/*.test.ts',
+    '!src/data/db/expoDriver.ts',
+    '!src/data/db/client.ts',
+    '!src/data/media/**',
+  ],
   coverageThreshold: {
     './src/domain/scheduler/': { lines: 95, branches: 90, functions: 95, statements: 95 },
     './src/domain/mask/': { lines: 90, branches: 85, functions: 90, statements: 90 },

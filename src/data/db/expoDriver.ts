@@ -11,7 +11,8 @@ function ops(x: Executor): Omit<SqlDriver, 'transaction'> {
     exec: (sql) => x.execAsync(sql),
     run: async (sql, params = []) => ({ changes: (await x.runAsync(sql, bind(params))).changes }),
     all: <T>(sql: string, params: readonly SqlParam[] = []) => x.getAllAsync<T>(sql, bind(params)),
-    get: async <T>(sql: string, params: readonly SqlParam[] = []) => (await x.getFirstAsync<T>(sql, bind(params))) ?? null,
+    get: async <T>(sql: string, params: readonly SqlParam[] = []) =>
+      (await x.getFirstAsync<T>(sql, bind(params))) ?? null,
   };
 }
 

@@ -25,7 +25,14 @@ function formatter(tz: string): Intl.DateTimeFormat {
 export function wallClock(t: number, tz: string): Wall {
   const parts = formatter(tz).formatToParts(t);
   const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value ?? 0);
-  return { y: get('year'), m: get('month'), d: get('day'), h: get('hour') % 24, min: get('minute'), s: get('second') };
+  return {
+    y: get('year'),
+    m: get('month'),
+    d: get('day'),
+    h: get('hour') % 24,
+    min: get('minute'),
+    s: get('second'),
+  };
 }
 
 function wallAsUtc(w: Wall): number {
@@ -48,14 +55,26 @@ export function zonedTimeToUtc(y: number, m: number, d: number, h: number, tz: s
 export function dayStart(t: number, tz: string): number {
   const w = wallClock(t, tz);
   const base = new Date(Date.UTC(w.y, w.m - 1, w.d - (w.h < DAY_CUTOFF_HOUR ? 1 : 0)));
-  return zonedTimeToUtc(base.getUTCFullYear(), base.getUTCMonth() + 1, base.getUTCDate(), DAY_CUTOFF_HOUR, tz);
+  return zonedTimeToUtc(
+    base.getUTCFullYear(),
+    base.getUTCMonth() + 1,
+    base.getUTCDate(),
+    DAY_CUTOFF_HOUR,
+    tz,
+  );
 }
 
 /** Calendar-day addition that keeps the local cutoff hour across DST changes (not 24h × n). */
 export function addDays(dayStartT: number, n: number, tz: string): number {
   const w = wallClock(dayStartT, tz);
   const base = new Date(Date.UTC(w.y, w.m - 1, w.d + n));
-  return zonedTimeToUtc(base.getUTCFullYear(), base.getUTCMonth() + 1, base.getUTCDate(), DAY_CUTOFF_HOUR, tz);
+  return zonedTimeToUtc(
+    base.getUTCFullYear(),
+    base.getUTCMonth() + 1,
+    base.getUTCDate(),
+    DAY_CUTOFF_HOUR,
+    tz,
+  );
 }
 
 export function dayEnd(t: number, tz: string): number {

@@ -43,7 +43,12 @@ export function shapeContains(s: Shape, pt: Point, img: Size, tolPx: number): bo
     case 'rect': {
       const x = s.x * img.width - tolPx;
       const y = s.y * img.height - tolPx;
-      return pt.x >= x && pt.y >= y && pt.x <= x + s.w * img.width + 2 * tolPx && pt.y <= y + s.h * img.height + 2 * tolPx;
+      return (
+        pt.x >= x &&
+        pt.y >= y &&
+        pt.x <= x + s.w * img.width + 2 * tolPx &&
+        pt.y <= y + s.h * img.height + 2 * tolPx
+      );
     }
     case 'stroke': {
       const halfW = (s.w * Math.max(img.width, img.height)) / 2;
@@ -69,7 +74,12 @@ function inExpandedBBox(b: BBox, pt: Point, img: Size, pad: number, minTarget: n
  * front-most (largest ord) wins. If no shape is hit precisely, a small mask whose bbox expanded to the minimum
  * touch target contains the point is accepted. Taps that hit nothing never reveal anything.
  */
-export function hitTest(masks: readonly HitCandidate[], pt: Point, img: Size, opts: HitOptions): string | null {
+export function hitTest(
+  masks: readonly HitCandidate[],
+  pt: Point,
+  img: Size,
+  opts: HitOptions,
+): string | null {
   const ordered = [...masks].sort((a, b) => {
     const ra = opts.revealed.has(a.id) ? 1 : 0;
     const rb = opts.revealed.has(b.id) ? 1 : 0;

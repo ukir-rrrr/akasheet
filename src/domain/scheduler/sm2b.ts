@@ -33,7 +33,12 @@ function again(s: ReviewState, ctx: SchedulerContext): ReviewState {
   const base = { ...s, dueAt: ctx.now + SM2B.AGAIN_DELAY_MS, lastReviewedAt: ctx.now };
   switch (s.phase) {
     case 'review':
-      return { ...base, phase: 'relearning', lapses: s.lapses + 1, ease: Math.max(SM2B.EF_MIN, roundEase(s.ease - SM2B.EF_PENALTY)) };
+      return {
+        ...base,
+        phase: 'relearning',
+        lapses: s.lapses + 1,
+        ease: Math.max(SM2B.EF_MIN, roundEase(s.ease - SM2B.EF_PENALTY)),
+      };
     case 'relearning':
       return { ...base, phase: 'relearning' };
     case 'new':
@@ -59,7 +64,10 @@ function good(s: ReviewState, ctx: SchedulerContext): ReviewState {
       if (s.reps < 2) {
         interval = SM2B.SECOND_INTERVAL;
       } else {
-        interval = Math.min(SM2B.MAX_INTERVAL, Math.max(s.intervalDays + 1, Math.round(s.intervalDays * s.ease)));
+        interval = Math.min(
+          SM2B.MAX_INTERVAL,
+          Math.max(s.intervalDays + 1, Math.round(s.intervalDays * s.ease)),
+        );
       }
       reps = s.reps + 1;
       break;

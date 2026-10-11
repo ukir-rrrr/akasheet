@@ -6,7 +6,11 @@ const unit = z.number().finite().min(0).max(1);
 const coords = z.array(unit).refine((p) => p.length % 2 === 0, 'odd coordinate count');
 
 const shapeSchema = z.discriminatedUnion('t', [
-  z.object({ t: z.literal('stroke'), w: unit.refine((w) => w > 0, 'w must be > 0'), p: coords.refine((p) => p.length >= 2) }),
+  z.object({
+    t: z.literal('stroke'),
+    w: unit.refine((w) => w > 0, 'w must be > 0'),
+    p: coords.refine((p) => p.length >= 2),
+  }),
   z.object({
     t: z.literal('rect'),
     x: unit,

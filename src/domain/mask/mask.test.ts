@@ -21,7 +21,10 @@ import {
 import type { MaskGeometry, Point, Size } from './types';
 
 describe('transform', () => {
-  const sizes = fc.record({ width: fc.integer({ min: 100, max: 4000 }), height: fc.integer({ min: 100, max: 4000 }) });
+  const sizes = fc.record({
+    width: fc.integer({ min: 100, max: 4000 }),
+    height: fc.integer({ min: 100, max: 4000 }),
+  });
 
   it('screen → normalized (4 digits) → screen round-trips within 0.5pt', () => {
     fc.assert(
@@ -45,8 +48,16 @@ describe('transform', () => {
   });
 
   it('letterboxes portrait and landscape images', () => {
-    expect(fitContain({ width: 400, height: 400 }, { width: 200, height: 100 })).toEqual({ s0: 2, ox: 0, oy: 100 });
-    expect(fitContain({ width: 400, height: 400 }, { width: 100, height: 200 })).toEqual({ s0: 2, ox: 100, oy: 0 });
+    expect(fitContain({ width: 400, height: 400 }, { width: 200, height: 100 })).toEqual({
+      s0: 2,
+      ox: 0,
+      oy: 100,
+    });
+    expect(fitContain({ width: 400, height: 400 }, { width: 100, height: 200 })).toEqual({
+      s0: 2,
+      ox: 100,
+      oy: 0,
+    });
   });
 
   it('converts screen widths to long-side-normalized widths', () => {
@@ -82,10 +93,16 @@ describe('simplify (RDP)', () => {
   it('keeps endpoints and max deviation ≤ ε', () => {
     fc.assert(
       fc.property(
-        fc.array(fc.record({ x: fc.double({ min: 0, max: 500, noNaN: true }), y: fc.double({ min: 0, max: 500, noNaN: true }) }), {
-          minLength: 2,
-          maxLength: 200,
-        }),
+        fc.array(
+          fc.record({
+            x: fc.double({ min: 0, max: 500, noNaN: true }),
+            y: fc.double({ min: 0, max: 500, noNaN: true }),
+          }),
+          {
+            minLength: 2,
+            maxLength: 200,
+          },
+        ),
         (pts) => {
           const out = simplifyRdp(pts, RDP_EPSILON_PX);
           expect(out[0]).toEqual(pts[0]);
@@ -129,18 +146,35 @@ describe('geometry', () => {
       img,
     );
     expect(s).toEqual({ t: 'stroke', w: 0.01, p: [0, 0.05, 1, 0.05] });
-    expect(polylineLength([{ x: 0, y: 0 }, { x: 3, y: 4 }])).toBe(5);
+    expect(
+      polylineLength([
+        { x: 0, y: 0 },
+        { x: 3, y: 4 },
+      ]),
+    ).toBe(5);
   });
 
   it('builds rects from any two corners', () => {
-    expect(buildRect({ x: 600, y: 1000 }, { x: 100, y: 200 }, img)).toEqual({ t: 'rect', x: 0.1, y: 0.1, w: 0.5, h: 0.4 });
+    expect(buildRect({ x: 600, y: 1000 }, { x: 100, y: 200 }, img)).toEqual({
+      t: 'rect',
+      x: 0.1,
+      y: 0.1,
+      w: 0.5,
+      h: 0.4,
+    });
   });
 
   it('computes bbox including stroke half width in px of the long side', () => {
     const g: MaskGeometry = { v: 1, shapes: [{ t: 'stroke', w: 0.01, p: [0.5, 0.5] }] };
     // half width = 0.01*2000/2 = 10px → 0.01 in u, 0.005 in v
     expect(geometryBBox(g, img)).toEqual({ x: 0.49, y: 0.495, w: 0.02, h: 0.01 });
-    const poly: MaskGeometry = { v: 1, shapes: [{ t: 'poly', p: [0.1, 0.1, 0.3, 0.1, 0.2, 0.4] }, { t: 'rect', x: 0.5, y: 0.5, w: 0.1, h: 0.1 }] };
+    const poly: MaskGeometry = {
+      v: 1,
+      shapes: [
+        { t: 'poly', p: [0.1, 0.1, 0.3, 0.1, 0.2, 0.4] },
+        { t: 'rect', x: 0.5, y: 0.5, w: 0.1, h: 0.1 },
+      ],
+    };
     expect(geometryBBox(poly, img)).toEqual({ x: 0.1, y: 0.1, w: 0.5, h: 0.5 });
   });
 });

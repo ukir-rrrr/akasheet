@@ -46,6 +46,7 @@ export type CardDetail = {
   id: string;
   folderId: string;
   title: string | null;
+  createdAt: number;
   media: CardMedia;
   masks: Mask[];
   /** Masks dropped because their stored geometry failed validation. */
@@ -75,12 +76,24 @@ function decodeMasks(rows: MaskRow[]): { masks: Mask[]; invalid: number } {
       console.warn(`mask ${r.id} has invalid geometry and was skipped`);
       continue;
     }
-    masks.push({ id: r.id, ord: r.ord, geometry, bbox: { x: r.bbox_x, y: r.bbox_y, w: r.bbox_w, h: r.bbox_h } });
+    masks.push({
+      id: r.id,
+      ord: r.ord,
+      geometry,
+      bbox: { x: r.bbox_x, y: r.bbox_y, w: r.bbox_w, h: r.bbox_h },
+    });
   }
   return { masks, invalid };
 }
 
-async function insertMasks(tx: SqlDriver, ctx: RepoContext, cardId: string, geoms: MaskGeometry[], img: Size, now: number) {
+async function insertMasks(
+  tx: SqlDriver,
+  ctx: RepoContext,
+  cardId: string,
+  geoms: MaskGeometry[],
+  img: Size,
+  now: number,
+) {
   const boxes = geoms.map((g) => geometryBBox(g, img));
   const order = readingOrder(boxes);
   for (let ord = 0; ord < order.length; ord++) {
@@ -109,7 +122,9 @@ export function createCardRepo(ctx: RepoContext) {
   const { db, clock } = ctx;
 
   async function liveFolder(tx: SqlDriver, folderId: string) {
-    const f = await tx.get<{ id: string }>('SELECT id FROM folders WHERE id = ? AND deleted_at IS NULL', [folderId]);
+    const f = await tx.get<{ id: string }>('SELECT id FROM folders WHERE id = ? AND deleted_at IS NULL', [
+      folderId,
+    ]);
     if (!f) throw new ValidationError('保存先のフォルダが見つかりません');
   }
 
@@ -120,13 +135,15 @@ export function createCardRepo(ctx: RepoContext) {
       const now = clock.now();
       return db.transaction(async (tx) => {
         await liveFolder(tx, input.folderId);
-        const existing = await tx.get<{ id: string }>('SELECT id FROM media WHERE sha256 = ?', [input.media.sha256]);
+        const existing = await tx.get<{ id: string }>('SELECT id FROM media WHERE sha256 = ?', [
+          input.media.sha256,
+        ]);
         const mediaId = existing?.id ?? ctx.newId();
         if (existing) {
-          await tx.run('UPDATE media SET deleted_at = NULL, updated_at = ? WHERE id = ? AND deleted_at IS NOT NULL', [
-            now,
-            mediaId,
-          ]);
+          await tx.run(
+            'UPDATE media SET deleted_at = NULL, updated_at = ? WHERE id = ? AND deleted_at IS NOT NULL',
+            [now, mediaId],
+          );
         } else {
           const m = input.media;
           await tx.run(
@@ -135,7 +152,10 @@ export function createCardRepo(ctx: RepoContext) {
             [mediaId, m.path, m.thumbPath, m.sha256, m.mime, m.width, m.height, m.byteSize, now, now],
           );
         }
-        const media = await tx.get<{ width: number; height: number }>('SELECT width, height FROM media WHERE id = ?', [mediaId]);
+        const media = await tx.get<{ width: number; height: number }>(
+          'SELECT width, height FROM media WHERE id = ?',
+          [mediaId],
+        );
         const cardId = ctx.newId();
         await tx.run(
           `INSERT INTO cards (id, folder_id, media_id, title, source, created_device_id, created_at, updated_at)
@@ -201,12 +221,13 @@ export function createCardRepo(ctx: RepoContext) {
         id: string;
         folder_id: string;
         title: string | null;
+        created_at: number;
         path: string;
         thumb_path: string;
         width: number;
         height: number;
       }>(
-        `SELECT c.id, c.folder_id, c.title, m.path, m.thumb_path, m.width, m.height
+        `SELECT c.id, c.folder_id, c.title, c.created_at, m.path, m.thumb_path, m.width, m.height
          FROM cards c JOIN media m ON m.id = c.media_id
          WHERE c.id = ? AND c.deleted_at IS NULL`,
         [cardId],
@@ -222,6 +243,7 @@ export function createCardRepo(ctx: RepoContext) {
         id: r.id,
         folderId: r.folder_id,
         title: r.title,
+        createdAt: r.created_at,
         media: { path: r.path, thumbPath: r.thumb_path, width: r.width, height: r.height },
         masks,
         invalidMaskCount: invalid,
@@ -232,8 +254,14 @@ export function createCardRepo(ctx: RepoContext) {
       const now = clock.now();
       await db.transaction(async (tx) => {
         for (const id of cardIds) {
-          await tx.run('UPDATE masks SET deleted_at = ?, updated_at = ? WHERE card_id = ? AND deleted_at IS NULL', [now, now, id]);
-          await tx.run('UPDATE cards SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL', [now, now, id]);
+          await tx.run(
+            'UPDATE masks SET deleted_at = ?, updated_at = ? WHERE card_id = ? AND deleted_at IS NULL',
+            [now, now, id],
+          );
+          await tx.run(
+            'UPDATE cards SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL',
+            [now, now, id],
+          );
         }
       });
     },
@@ -243,7 +271,11 @@ export function createCardRepo(ctx: RepoContext) {
       await db.transaction(async (tx) => {
         await liveFolder(tx, folderId);
         for (const id of cardIds) {
-          await tx.run('UPDATE cards SET folder_id = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL', [folderId, now, id]);
+          await tx.run('UPDATE cards SET folder_id = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL', [
+            folderId,
+            now,
+            id,
+          ]);
         }
       });
     },
@@ -265,7 +297,9 @@ export function createCardRepo(ctx: RepoContext) {
     },
 
     async livePaths(): Promise<Set<string>> {
-      const rows = await db.all<{ path: string; thumb_path: string }>('SELECT path, thumb_path FROM media WHERE deleted_at IS NULL');
+      const rows = await db.all<{ path: string; thumb_path: string }>(
+        'SELECT path, thumb_path FROM media WHERE deleted_at IS NULL',
+      );
       return new Set(rows.flatMap((r) => [r.path, r.thumb_path]));
     },
   };
