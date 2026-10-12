@@ -65,6 +65,8 @@ export const FOLDER_COLOR_HEX: Record<FolderColor, string> = {
 export const space = { 4: 4, 8: 8, 12: 12, 16: 16, 20: 20, 24: 24, 32: 32, 40: 40 } as const;
 export const radius = { xs: 6, sm: 10, md: 14, lg: 20, xl: 24, full: 999 } as const;
 export const heights = { tap: 44, button: 48, cta: 56, answer: 72, tool: 56, row: 68 } as const;
+/** Top-trailing width for Expo Go / dev-client floating tools (gear) so controls stay tappable. */
+export const expoToolsTrailingReserve = 60;
 
 const mincho = Platform.select({ ios: 'Hiragino Mincho ProN', android: 'serif', default: 'serif' });
 

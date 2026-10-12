@@ -14,7 +14,7 @@ import { useFolderActions } from '@/features/folders/useFolderActions';
 import { errorMessage } from '@/shared/errors';
 import { useDialogs } from '@/ui/dialogs';
 import { AppText, Button, FolderTab, Icon, IconButton, PressableScale } from '@/ui/primitives';
-import { heights, radius, useTheme } from '@/ui/theme';
+import { expoToolsTrailingReserve, heights, radius, useTheme } from '@/ui/theme';
 import { Toast, type ToastSpec } from '@/ui/Toast';
 
 import { editorReducer, initialEditorState } from './editorReducer';
@@ -170,17 +170,16 @@ export function CardEditorScreen({ initialFolderId }: { initialFolderId?: string
 
   return (
     <View style={{ flex: 1, backgroundColor: c.canvas }}>
-      <View
-        style={[
-          styles.topBar,
-          {
-            paddingTop: insets.top + 4,
-            paddingRight: 8 + insets.right + heights.tap,
-            backgroundColor: c.bg,
-          },
-        ]}
-      >
+      <View style={[styles.topBar, { paddingTop: insets.top + 4, backgroundColor: c.bg }]}>
         <IconButton icon="close" label="閉じる" onPress={close} testID="editor-close" />
+        <Button
+          label="保存"
+          onPress={save}
+          loading={saving}
+          height={heights.tap}
+          style={{ borderRadius: radius.full, paddingHorizontal: 20 }}
+          testID="editor-save"
+        />
         <PressableScale
           accessibilityRole="button"
           accessibilityLabel={`保存先 ${folder?.name ?? '未選択'}、変更する`}
@@ -193,19 +192,12 @@ export function CardEditorScreen({ initialFolderId }: { initialFolderId?: string
           ) : (
             <Icon name="folder-outline" size={18} />
           )}
-          <AppText variant="button" numberOfLines={1} style={{ maxWidth: 160 }}>
+          <AppText variant="button" numberOfLines={1} style={{ flexShrink: 1 }}>
             {folder?.name ?? '保存先を選ぶ'}
           </AppText>
           <Icon name="chevron-down" size={16} color={c.ink3} />
         </PressableScale>
-        <Button
-          label="保存"
-          onPress={save}
-          loading={saving}
-          height={40}
-          style={{ borderRadius: radius.full, paddingHorizontal: 20 }}
-          testID="editor-save"
-        />
+        <View style={{ width: insets.right + expoToolsTrailingReserve }} accessibilityElementsHidden />
       </View>
 
       <View style={{ flex: 1 }}>
@@ -267,6 +259,7 @@ const styles = StyleSheet.create({
   topBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingBottom: 8 },
   folderPill: {
     flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
