@@ -14,7 +14,7 @@ import { useFolderActions } from '@/features/folders/useFolderActions';
 import { errorMessage } from '@/shared/errors';
 import { useDialogs } from '@/ui/dialogs';
 import { AppText, Button, FolderTab, Icon, IconButton, PressableScale } from '@/ui/primitives';
-import { radius, useTheme } from '@/ui/theme';
+import { heights, radius, useTheme } from '@/ui/theme';
 import { Toast, type ToastSpec } from '@/ui/Toast';
 
 import { editorReducer, initialEditorState } from './editorReducer';
@@ -170,7 +170,16 @@ export function CardEditorScreen({ initialFolderId }: { initialFolderId?: string
 
   return (
     <View style={{ flex: 1, backgroundColor: c.canvas }}>
-      <View style={[styles.topBar, { paddingTop: insets.top + 4, backgroundColor: c.bg }]}>
+      <View
+        style={[
+          styles.topBar,
+          {
+            paddingTop: insets.top + 4,
+            paddingRight: 8 + insets.right + heights.tap,
+            backgroundColor: c.bg,
+          },
+        ]}
+      >
         <IconButton icon="close" label="閉じる" onPress={close} testID="editor-close" />
         <PressableScale
           accessibilityRole="button"
