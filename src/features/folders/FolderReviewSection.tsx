@@ -1,19 +1,20 @@
-import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
+import { pushReview } from '@/features/review/reviewNavigation';
 import { AppText, Button, Card } from '@/ui/primitives';
 import { formatShortDate } from '@/ui/format';
 import { heights, useTheme } from '@/ui/theme';
 
 type Props = {
   folderId: string;
+  folderName: string | null;
   dueCount: number;
   totalCount: number;
   nextDueAt: number | null | undefined;
   tz: string;
 };
 
-export function FolderReviewSection({ folderId, dueCount, totalCount, nextDueAt, tz }: Props) {
+export function FolderReviewSection({ folderId, folderName, dueCount, totalCount, nextDueAt, tz }: Props) {
   const { c } = useTheme();
 
   return (
@@ -46,7 +47,7 @@ export function FolderReviewSection({ folderId, dueCount, totalCount, nextDueAt,
         }
         disabled={dueCount === 0}
         height={heights.cta}
-        onPress={() => router.push({ pathname: '/review/[folderId]', params: { folderId } })}
+        onPress={() => pushReview({ folderId, folderName, onlyCardIds: null })}
         testID="start-review"
       />
     </>

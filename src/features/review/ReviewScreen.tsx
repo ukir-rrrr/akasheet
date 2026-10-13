@@ -26,19 +26,24 @@ const UNDO_WINDOW_MS = 5000;
 /** `folderId` null = all folders; `onlyCardIds` = 「まだを もう一度」. */
 export function ReviewScreen({
   folderId,
+  folderName: folderNameHandoff,
   onlyCardIds,
+  launchKey,
 }: {
   folderId: string | null;
+  /** From review launch hand-off; when null the folder name is loaded from the query cache. */
+  folderName: string | null;
   onlyCardIds: string[] | null;
+  launchKey: string;
 }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const dialogs = useDialogs();
   const today = useToday();
   const folder = useFolder(folderId);
-  const r = useReviewSession(folderId, onlyCardIds);
+  const r = useReviewSession(folderId, onlyCardIds, launchKey);
   const [stagger, setStagger] = useState<string[] | undefined>(undefined);
-  const folderName = folderId ? (folder.data?.name ?? '') : 'すべてのフォルダ';
+  const folderName = folderNameHandoff ?? (folderId ? (folder.data?.name ?? '') : 'すべてのフォルダ');
   const view = r.view;
 
   const close = () => goBackOr('/');
