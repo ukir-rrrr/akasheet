@@ -13,6 +13,7 @@ import { useDialogs } from '@/ui/dialogs';
 import { formatInterval, formatShortDate } from '@/ui/format';
 import { haptic } from '@/ui/haptics';
 import { PaperIllustration } from '@/ui/PaperIllustration';
+import { HeaderBar } from '@/ui/HeaderBar';
 import { AppText, Button, ErrorState, Icon, IconButton, PressableScale } from '@/ui/primitives';
 import { heights, radius, useTheme } from '@/ui/theme';
 import { Toast, type ToastSpec } from '@/ui/Toast';
@@ -94,7 +95,7 @@ export function ReviewScreen({
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <View style={[styles.top, { paddingTop: insets.top + 2 }]}>
+      <HeaderBar topGap={2} horizontal={4} style={styles.top}>
         <IconButton icon="close" label="復習を終える" onPress={close} testID="review-close" />
         <AppText variant="sub" color={c.ink2} style={{ flex: 1, textAlign: 'center' }} numberOfLines={1}>
           {folderName}
@@ -108,7 +109,7 @@ export function ReviewScreen({
         >
           {progress ? `${Math.min(progress.index, progress.total)} / ${progress.total}` : ''}
         </AppText>
-      </View>
+      </HeaderBar>
       <View style={[styles.track, { backgroundColor: c.surface2 }]}>
         <View
           style={{
@@ -374,7 +375,7 @@ function AnswerZone({
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, paddingBottom: 6 },
+  top: { paddingBottom: 6 },
   track: { height: 4 },
   pillWrap: { position: 'absolute', bottom: 12, left: 0, right: 0, alignItems: 'center' },
   pill: { borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 6 },

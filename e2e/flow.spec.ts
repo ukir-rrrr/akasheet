@@ -133,6 +133,22 @@ test('create a folder and a masked card, then review it', async ({ page }) => {
   await shot('back-to-folder');
 });
 
+test('folder detail menu renames without hitting dev-menu gutter', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('create-first-folder')).toBeVisible({ timeout: 90_000 });
+  await createFolder(page, '日本史');
+  await page.getByTestId('folder-row-日本史').click();
+  await expect(page.getByTestId('folder-menu')).toBeVisible();
+  await page.getByTestId('folder-menu').click();
+  await expect(page.getByTestId('menu-rename')).toBeVisible();
+  await page.getByTestId('menu-rename').click();
+  await page.getByTestId('prompt-input').fill('世界史');
+  await page.getByTestId('prompt-confirm').click();
+  await expect(page.getByTestId('folder-detail-title')).toHaveText('世界史');
+  await page.getByTestId('back').click();
+  await expect(page.getByTestId('folder-row-世界史')).toBeVisible();
+});
+
 test.describe('dark mode', () => {
   test.use({ colorScheme: 'dark' });
 
