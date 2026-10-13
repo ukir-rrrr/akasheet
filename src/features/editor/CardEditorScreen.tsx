@@ -8,7 +8,7 @@ import type { Folder } from '@/data/repos/folderRepo';
 import { useAppData } from '@/features/app/AppDataProvider';
 import { goBackOr } from '@/features/app/navigation';
 import { flash } from '@/features/app/flash';
-import { useFolders, useInvalidateAll } from '@/features/app/queries';
+import { useFolders, useQueryInvalidation } from '@/features/app/queries';
 import { pendingImage, type PickedImage } from '@/features/cards/pickImage';
 import { useFolderActions } from '@/features/folders/useFolderActions';
 import { errorMessage } from '@/shared/errors';
@@ -47,7 +47,7 @@ export function CardEditorScreen({ initialFolderId }: { initialFolderId?: string
   const insets = useSafeAreaInsets();
   const app = useAppData();
   const dialogs = useDialogs();
-  const invalidate = useInvalidateAll();
+  const { afterCardSave } = useQueryInvalidation();
   const folders = useFolders();
   const { createFolder, startCard } = useFolderActions();
   const [picked] = useState<PickedImage | null>(() => pendingImage.take());
@@ -133,7 +133,7 @@ export function CardEditorScreen({ initialFolderId }: { initialFolderId?: string
         source: picked.source,
       });
       dispatch({ type: 'markSaved' });
-      await invalidate();
+      await afterCardSave(target.id);
       const savedFolderId = target.id;
       flash.show({
         message: `「${target.name}」に保存しました`,

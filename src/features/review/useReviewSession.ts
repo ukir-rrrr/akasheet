@@ -22,7 +22,7 @@ import {
 import { dayEnd, dayStart } from '@/domain/scheduler/day';
 import type { Rating, ReviewState } from '@/domain/scheduler/types';
 import { useAppData } from '@/features/app/AppDataProvider';
-import { keys, useCard, useInvalidateAll } from '@/features/app/queries';
+import { keys, useCard, useQueryInvalidation } from '@/features/app/queries';
 
 import type { SessionResult } from './sessionResult';
 
@@ -54,7 +54,7 @@ export type ReviewView =
  */
 export function useReviewSession(folderId: string | null, onlyCardIds: string[] | null) {
   const app = useAppData();
-  const invalidate = useInvalidateAll();
+  const { afterReview } = useQueryInvalidation();
   const [session, setSession] = useState<SessionState | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [attempt, setAttempt] = useState(0);
@@ -145,7 +145,11 @@ export function useReviewSession(folderId: string | null, onlyCardIds: string[] 
         resumePending(applyAnswer(session, { cardId, rating, logId: res.logId }, res.next.dueAt), now),
       );
       setLast({ rating, next: res.next, at: now });
-      invalidate();
+      void afterReview({
+        cardId,
+        cardFolderId: card.data?.folderId ?? null,
+        scopeFolderId: folderId,
+      });
     } finally {
       setBusy(false);
     }
@@ -159,7 +163,11 @@ export function useReviewSession(folderId: string | null, onlyCardIds: string[] 
       await app.reviews.undo(prev.logId);
       setSession(undoAnswer(session));
       setLast(null);
-      invalidate();
+      void afterReview({
+        cardId: prev.cardId,
+        cardFolderId: card.data?.folderId ?? null,
+        scopeFolderId: folderId,
+      });
     } finally {
       setBusy(false);
     }

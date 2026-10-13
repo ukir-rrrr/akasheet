@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useCallback } from 'react';
 
 import { useAppData } from '@/features/app/AppDataProvider';
-import { useInvalidateAll } from '@/features/app/queries';
+import { useQueryInvalidation } from '@/features/app/queries';
 import { pendingImage, pickImage, type PickSource } from '@/features/cards/pickImage';
 import { validateFolderName, type Folder } from '@/data/repos/folderRepo';
 import { errorMessage } from '@/shared/errors';
@@ -21,7 +21,7 @@ function nameError(v: string): string | null {
 export function useFolderActions() {
   const app = useAppData();
   const dialogs = useDialogs();
-  const invalidate = useInvalidateAll();
+  const { afterFolderCreate, afterFolderRename, afterFolderDelete } = useQueryInvalidation();
 
   const createFolder = useCallback(
     async (presetName?: string): Promise<Folder | null> => {
@@ -37,11 +37,11 @@ export function useFolderActions() {
       if (name === null) return null;
       return dialogs.attempt('作成できませんでした', async () => {
         const folder = await app.folders.create(name);
-        await invalidate();
+        await afterFolderCreate();
         return folder;
       });
     },
-    [app, dialogs, invalidate],
+    [app, dialogs, afterFolderCreate],
   );
 
   const renameFolder = useCallback(
@@ -55,10 +55,10 @@ export function useFolderActions() {
       if (name === null) return;
       await dialogs.attempt('名前を変更できませんでした', async () => {
         await app.folders.rename(folder.id, name);
-        await invalidate();
+        await afterFolderRename(folder.id);
       });
     },
-    [app, dialogs, invalidate],
+    [app, dialogs, afterFolderRename],
   );
 
   const deleteFolder = useCallback(
@@ -73,12 +73,12 @@ export function useFolderActions() {
       if (!ok) return false;
       const done = await dialogs.attempt('削除できませんでした', async () => {
         await app.folders.remove(folder.id);
-        await invalidate();
+        await afterFolderDelete(folder.id);
         return true;
       });
       return done === true;
     },
-    [app, dialogs, invalidate],
+    [app, dialogs, afterFolderDelete],
   );
 
   const folderMenu = useCallback(
