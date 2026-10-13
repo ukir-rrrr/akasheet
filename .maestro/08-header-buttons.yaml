@@ -1,0 +1,33 @@
+appId: host.exp.exponent
+---
+# Smoke: top-bar controls (⋯ menu, editor save pill row) are tappable with dev-menu reserve.
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: create-first-folder
+    timeout: 120000
+- tapOn:
+    id: create-first-folder
+- inputText: '英単語'
+- tapOn:
+    id: prompt-confirm
+- tapOn:
+    id: folder-row-英単語
+- tapOn:
+    id: folder-menu
+- assertVisible:
+    id: menu-rename
+- tapOn:
+    id: dialog-cancel
+- tapOn:
+    id: folder-try-sample
+- extendedWaitUntil:
+    visible:
+      id: editor-folder
+    timeout: 60000
+- assertVisible:
+    id: editor-save
+- tapOn:
+    id: editor-close
+- tapOn:
+    id: dialog-confirm

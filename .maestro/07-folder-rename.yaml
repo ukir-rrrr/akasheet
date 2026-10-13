@@ -1,0 +1,28 @@
+appId: host.exp.exponent
+---
+# Folder detail ⋯ menu must stay left of Expo Go's floating dev-menu gear.
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: create-first-folder
+    timeout: 120000
+- tapOn:
+    id: create-first-folder
+- inputText: '日本史'
+- tapOn:
+    id: prompt-confirm
+- tapOn:
+    id: folder-row-日本史
+- tapOn:
+    id: folder-menu
+- tapOn:
+    id: menu-rename
+- eraseText
+- inputText: '世界史'
+- tapOn:
+    id: prompt-confirm
+- assertVisible: '世界史'
+- tapOn:
+    id: back
+- assertVisible:
+    id: folder-row-世界史

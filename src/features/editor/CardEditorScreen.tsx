@@ -13,8 +13,9 @@ import { pendingImage, type PickedImage } from '@/features/cards/pickImage';
 import { useFolderActions } from '@/features/folders/useFolderActions';
 import { errorMessage } from '@/shared/errors';
 import { useDialogs } from '@/ui/dialogs';
+import { HeaderBar } from '@/ui/HeaderBar';
 import { AppText, Button, FolderTab, Icon, IconButton, PressableScale } from '@/ui/primitives';
-import { heights, radius, useTheme } from '@/ui/theme';
+import { radius, useTheme } from '@/ui/theme';
 import { Toast, type ToastSpec } from '@/ui/Toast';
 
 import { editorReducer, initialEditorState } from './editorReducer';
@@ -170,16 +171,7 @@ export function CardEditorScreen({ initialFolderId }: { initialFolderId?: string
 
   return (
     <View style={{ flex: 1, backgroundColor: c.canvas }}>
-      <View
-        style={[
-          styles.topBar,
-          {
-            paddingTop: insets.top + 4,
-            paddingRight: 8 + insets.right + heights.tap,
-            backgroundColor: c.bg,
-          },
-        ]}
-      >
+      <HeaderBar style={[styles.topBar, { backgroundColor: c.bg }]}>
         <IconButton icon="close" label="閉じる" onPress={close} testID="editor-close" />
         <PressableScale
           accessibilityRole="button"
@@ -206,7 +198,7 @@ export function CardEditorScreen({ initialFolderId }: { initialFolderId?: string
           style={{ borderRadius: radius.full, paddingHorizontal: 20 }}
           testID="editor-save"
         />
-      </View>
+      </HeaderBar>
 
       <View style={{ flex: 1 }}>
         {prepared ? (
@@ -264,17 +256,18 @@ export function CardEditorScreen({ initialFolderId }: { initialFolderId?: string
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  topBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingBottom: 8 },
+  topBar: { gap: 10, paddingBottom: 8 },
   folderPill: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    height: 40,
+    gap: 8,
+    minHeight: 44,
     borderRadius: radius.full,
     borderWidth: 1,
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
   },
   bottom: { paddingHorizontal: 8, paddingTop: 10 },
   previewBar: {

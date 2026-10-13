@@ -129,12 +129,7 @@ export function FolderDetailScreen({ folderId }: { folderId: string }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <FolderDetailHeader
-        folder={folder.data ?? undefined}
-        paddingTop={insets.top + 4}
-        onBack={back}
-        onMenu={openMenu}
-      />
+      <FolderDetailHeader folder={folder.data ?? undefined} onBack={back} onMenu={openMenu} />
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]}>
         {cards.isPending ? (
