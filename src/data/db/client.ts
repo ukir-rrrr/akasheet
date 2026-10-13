@@ -18,6 +18,7 @@ import { createReviewRepo, type ReviewRepo } from '../repos/reviewRepo';
 import { defaultDekDeps } from '../security/dek.defaults';
 import { loadOrCreateDataKey } from '../security/dek';
 import { createEncryptedMediaBackend } from '../security/encryptedMediaBackend';
+import { createReadOnlyMediaBackend } from '../security/readOnlyMediaBackend';
 import { createFieldProtector, readOnlyFieldProtector } from '../security/fieldProtector';
 import { migrateAtRest } from '../security/migrateAtRest';
 import { detectProtectedData } from '../security/protectedData';
@@ -81,7 +82,7 @@ export async function openAppData(): Promise<AppData> {
   const fields = dekResult.ok ? createFieldProtector(dekResult.key) : readOnlyFieldProtector;
   const mediaBackend = dekResult.ok
     ? createEncryptedMediaBackend(platformBackend, dekResult.key)
-    : platformBackend;
+    : createReadOnlyMediaBackend(platformBackend);
   const store = createMediaStore(mediaBackend);
 
   const newId = createIdGenerator(systemClock, (n) => Crypto.getRandomBytes(n));

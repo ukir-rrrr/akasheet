@@ -1,7 +1,7 @@
 import type { SqlDriver } from '../db/driver';
 import type { MediaBackend } from '../media/store';
 import type { MetaRepo } from '../repos/metaRepo';
-import { isEncryptedBlob, isValidSealedField } from './aead';
+import { FIELD_PREFIX, isEncryptedBlob, isValidSealedField } from './aead';
 import { DATA_PROTECTION_META, DATA_PROTECTION_VERSION } from './migrateAtRest';
 import { WEB_WRAP_PREFIX } from './mediaAtRest';
 
@@ -22,7 +22,8 @@ export async function detectProtectedData(deps: {
 
   for (const { table, col } of TEXT_COLUMNS) {
     const rows = await deps.db.all<{ value: string }>(
-      `SELECT ${col} AS value FROM ${table} WHERE ${col} IS NOT NULL LIMIT 50`,
+      `SELECT ${col} AS value FROM ${table} WHERE ${col} LIKE ?`,
+      [`${FIELD_PREFIX}%`],
     );
     for (const r of rows) {
       if (isValidSealedField(r.value)) return true;

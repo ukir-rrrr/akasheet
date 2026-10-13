@@ -25,6 +25,25 @@ const emptyMedia = {
 };
 
 describe('detectProtectedData', () => {
+  it('detects sealed text beyond an arbitrary row sample', async () => {
+    const key = await importAesKey(createHash('sha256').update('deep').digest());
+    const db = createBetterSqliteDriver();
+    await migrate(db);
+    const meta = createMetaRepo(db);
+    const sealed = await sealString(key, '奥の秘密');
+    for (let i = 0; i < 60; i++) {
+      await db.run(
+        'INSERT INTO folders (id, name, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, 1, 1, 1)',
+        [`f-plain-${i}`, `平文${i}`, 'ai'],
+      );
+    }
+    await db.run(
+      'INSERT INTO folders (id, name, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, 1, 1, 1)',
+      ['f-sealed', sealed, 'ai'],
+    );
+    expect(await detectProtectedData({ db, meta, mediaBackend: emptyMedia, platformOs: 'ios' })).toBe(true);
+  });
+
   it('detects sealed folder names', async () => {
     const key = await importAesKey(createHash('sha256').update('d').digest());
     const db = createBetterSqliteDriver();
@@ -60,6 +79,22 @@ describe('detectProtectedData', () => {
       uriFor: async () => wrapped,
     };
     expect(await detectProtectedData({ db, meta, mediaBackend, platformOs: 'web' })).toBe(true);
+  });
+
+  it('ignores unreadable media entries', async () => {
+    const db = createBetterSqliteDriver();
+    await migrate(db);
+    const meta = createMetaRepo(db);
+    const { path } = mediaPaths('u'.repeat(64));
+    const mediaBackend = {
+      ...emptyMedia,
+      keys: async () => [path],
+      uriFor: async () => 'file://broken',
+      readBytes: async () => {
+        throw new Error('io error');
+      },
+    };
+    expect(await detectProtectedData({ db, meta, mediaBackend, platformOs: 'ios' })).toBe(false);
   });
 
   it('detects AKSH1 blobs on native media', async () => {
