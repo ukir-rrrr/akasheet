@@ -8,7 +8,7 @@ export type ReviewLaunch = {
   key: string;
   /** null = all folders. */
   folderId: string | null;
-  folderName: string;
+  folderName: string | null;
   /** null = today's due queue for `folderId`; non-null = replay exactly these cards (「まだを もう一度」). */
   onlyCardIds: readonly string[] | null;
 };
@@ -27,7 +27,33 @@ export function createReviewLaunch(input: Omit<ReviewLaunch, 'key'>): ReviewLaun
   };
 }
 
-export const reviewLaunch = createHandoff<ReviewLaunch>();
+const reviewLaunchHandoff = createHandoff<ReviewLaunch>();
+
+/** Last launch consumed by the review route (survives React StrictMode remount / double init). */
+let routeConsumedLaunch: ReviewLaunch | null = null;
+
+export const reviewLaunch = {
+  set(launch: ReviewLaunch) {
+    routeConsumedLaunch = null;
+    reviewLaunchHandoff.set(launch);
+  },
+  peek(): ReviewLaunch | null {
+    return reviewLaunchHandoff.peek();
+  },
+  take(): ReviewLaunch | null {
+    return reviewLaunchHandoff.take();
+  },
+};
+
+/** Read the pending launch for route resolution; safe to call more than once before the next `set`. */
+export function consumeReviewLaunch(): ReviewLaunch | null {
+  const pending = reviewLaunchHandoff.peek();
+  if (pending) {
+    routeConsumedLaunch = reviewLaunchHandoff.take();
+    return routeConsumedLaunch;
+  }
+  return routeConsumedLaunch;
+}
 
 export type ReviewRouteParams = { folderId?: string; ids?: string };
 

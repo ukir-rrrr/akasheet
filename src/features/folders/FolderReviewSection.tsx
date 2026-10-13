@@ -7,7 +7,7 @@ import { heights, useTheme } from '@/ui/theme';
 
 type Props = {
   folderId: string;
-  folderName: string;
+  folderName: string | null;
   dueCount: number;
   totalCount: number;
   nextDueAt: number | null | undefined;

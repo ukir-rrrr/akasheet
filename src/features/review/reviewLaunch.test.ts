@@ -1,5 +1,5 @@
 import { ALL_FOLDERS } from './constants';
-import { createReviewLaunch, resolveReviewRoute } from './reviewLaunch';
+import { consumeReviewLaunch, createReviewLaunch, resolveReviewRoute, reviewLaunch } from './reviewLaunch';
 
 describe('resolveReviewRoute', () => {
   it('uses the hand-off payload when present (ignoring stale URL ids)', () => {
@@ -38,6 +38,37 @@ describe('resolveReviewRoute', () => {
     const resolved = resolveReviewRoute(taken, { folderId: ALL_FOLDERS, ids: 'should-not-apply' });
     expect(resolved.onlyCardIds).toBeNull();
     expect(resolved.folderName).toBe('すべてのフォルダ');
+  });
+});
+
+describe('consumeReviewLaunch', () => {
+  it('returns the same launch when called twice (StrictMode-style double init)', () => {
+    const launch = createReviewLaunch({
+      folderId: 'folder-a',
+      folderName: '日本史',
+      onlyCardIds: null,
+    });
+    reviewLaunch.set(launch);
+    expect(consumeReviewLaunch()).toEqual(launch);
+    expect(consumeReviewLaunch()).toEqual(launch);
+    expect(reviewLaunch.peek()).toBeNull();
+  });
+
+  it('clears the sticky launch when a new launch is set', () => {
+    const first = createReviewLaunch({
+      folderId: 'f1',
+      folderName: 'One',
+      onlyCardIds: null,
+    });
+    reviewLaunch.set(first);
+    consumeReviewLaunch();
+    const second = createReviewLaunch({
+      folderId: 'f2',
+      folderName: 'Two',
+      onlyCardIds: null,
+    });
+    reviewLaunch.set(second);
+    expect(consumeReviewLaunch()).toEqual(second);
   });
 });
 
