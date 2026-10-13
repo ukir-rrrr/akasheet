@@ -4,6 +4,7 @@ import { Platform, Share, StyleSheet, View } from 'react-native';
 
 import { openAppData, type AppData } from '@/data/db/client';
 import { errorMessage } from '@/shared/errors';
+import { logMaintenanceFailure } from '@/shared/log';
 import { AppText, Button, Icon } from '@/ui/primitives';
 import { useTheme } from '@/ui/theme';
 
@@ -20,7 +21,7 @@ async function startup(): Promise<AppData> {
   try {
     await app.runMaintenance();
   } catch (e) {
-    console.warn('media GC failed', e);
+    logMaintenanceFailure(e);
   }
   return app;
 }

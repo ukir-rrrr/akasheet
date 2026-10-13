@@ -142,6 +142,41 @@ describe('saveCard', () => {
   });
 });
 
+describe('collectGarbage', () => {
+  const orphanA = `media/aa/${'d'.repeat(64)}.jpg`;
+  const orphanB = `media/bb/${'e'.repeat(64)}.jpg`;
+
+  it('logs a failing delete, continues other deletions, and retries on a later run', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { backend, files } = fakeBackend({});
+    const failOnce = new Set([orphanA]);
+    const baseRemove = backend.remove.bind(backend);
+    backend.remove = async (key) => {
+      if (failOnce.has(key)) {
+        failOnce.delete(key);
+        throw new Error(`delete failed: ${key}`);
+      }
+      await baseRemove(key);
+    };
+    const store = createMediaStore(backend);
+    files.set(orphanA, new Uint8Array(1));
+    files.set(orphanB, new Uint8Array(1));
+
+    expect(await store.collectGarbage(new Set())).toBe(1);
+    expect(files.has(orphanA)).toBe(true);
+    expect(files.has(orphanB)).toBe(false);
+    expect(warn).toHaveBeenCalledWith(
+      '[media-gc] delete-file failed',
+      expect.objectContaining({ key: orphanA, error: expect.stringContaining('delete failed') }),
+    );
+
+    expect(await store.collectGarbage(new Set())).toBe(1);
+    expect(files.has(orphanA)).toBe(false);
+
+    warn.mockRestore();
+  });
+});
+
 describe('runMaintenance', () => {
   it('purges media of long-deleted cards and deletes orphan files', async () => {
     const { store, cards, media, clock, files, folderId } = await setup();
