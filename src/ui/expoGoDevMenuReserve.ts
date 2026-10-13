@@ -1,4 +1,4 @@
-/** Expo Go / dev-client floating dev-menu control is roughly one minimum tap target wide (UI spec: 44pt). */
+/** Expo Go (storeClient) floating dev-menu control is roughly one minimum tap target wide (UI spec: 44pt). */
 export const EXPO_GO_DEV_MENU_RESERVE = 44;
 
 export const EXPO_STORE_CLIENT_ENV = 'storeClient';

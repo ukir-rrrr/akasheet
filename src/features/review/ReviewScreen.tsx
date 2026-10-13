@@ -98,7 +98,7 @@ export function ReviewScreen({
         </AppText>
         <AppText
           variant="button"
-          style={{ fontVariant: ['tabular-nums'], minWidth: 44, textAlign: 'right' }}
+          style={{ fontVariant: ['tabular-nums'], minWidth: 44, textAlign: 'right', paddingRight: 8 }}
           accessibilityLabel={progress ? `${progress.total}枚中 ${progress.index}枚目` : undefined}
           testID="review-progress"
         >
