@@ -11,7 +11,7 @@ import {
   useCards,
   useFolder,
   useFolders,
-  useInvalidateAll,
+  useQueryInvalidation,
   useNextDue,
   useToday,
 } from '@/features/app/queries';
@@ -63,7 +63,7 @@ export function FolderDetailScreen({ folderId }: { folderId: string }) {
   const { width } = useWindowDimensions();
   const app = useAppData();
   const dialogs = useDialogs();
-  const invalidate = useInvalidateAll();
+  const { afterCardsMove, afterCardsDelete } = useQueryInvalidation();
   const today = useToday();
   const folder = useFolder(folderId);
   const folders = useFolders();
@@ -102,7 +102,7 @@ export function FolderDetailScreen({ folderId }: { folderId: string }) {
     await dialogs.attempt('移動できませんでした', async () => {
       await app.cards.move(ids, target);
       setSelected(null);
-      await invalidate();
+      await afterCardsMove(folderId, target, ids);
     });
   };
 
@@ -117,7 +117,7 @@ export function FolderDetailScreen({ folderId }: { folderId: string }) {
     await dialogs.attempt('削除できませんでした', async () => {
       await app.cards.remove(ids);
       setSelected(null);
-      await invalidate();
+      await afterCardsDelete(folderId, ids);
     });
   };
 

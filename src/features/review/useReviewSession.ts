@@ -22,11 +22,18 @@ import {
 import { dayEnd, dayStart } from '@/domain/scheduler/day';
 import type { Rating, ReviewState } from '@/domain/scheduler/types';
 import { useAppData } from '@/features/app/AppDataProvider';
-import { keys, useCard, useInvalidateAll } from '@/features/app/queries';
+import { keys, useCard, useQueryInvalidation } from '@/features/app/queries';
 
+import { cacheTargetsAfterAnswer, cacheTargetsAfterUndo } from './reviewSessionCache';
 import type { SessionResult } from './sessionResult';
 
-export type LastAnswerInfo = { rating: Rating; next: ReviewState; at: number };
+export type LastAnswerInfo = {
+  cardId: string;
+  cardFolderId: string | null;
+  rating: Rating;
+  next: ReviewState;
+  at: number;
+};
 
 export type CardView = {
   kind: 'card';
@@ -54,7 +61,7 @@ export type ReviewView =
  */
 export function useReviewSession(folderId: string | null, onlyCardIds: string[] | null) {
   const app = useAppData();
-  const invalidate = useInvalidateAll();
+  const { afterReview } = useQueryInvalidation();
   const [session, setSession] = useState<SessionState | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [attempt, setAttempt] = useState(0);
@@ -144,8 +151,15 @@ export function useReviewSession(folderId: string | null, onlyCardIds: string[] 
       setSession(
         resumePending(applyAnswer(session, { cardId, rating, logId: res.logId }, res.next.dueAt), now),
       );
-      setLast({ rating, next: res.next, at: now });
-      invalidate();
+      const lastAnswer: LastAnswerInfo = {
+        cardId,
+        cardFolderId: card.data?.folderId ?? null,
+        rating,
+        next: res.next,
+        at: now,
+      };
+      setLast(lastAnswer);
+      void afterReview(cacheTargetsAfterAnswer(cardId, lastAnswer.cardFolderId, folderId));
     } finally {
       setBusy(false);
     }
@@ -153,13 +167,13 @@ export function useReviewSession(folderId: string | null, onlyCardIds: string[] 
 
   const undo = async () => {
     const prev = session ? lastAnswer(session) : undefined;
-    if (!session || !prev || busy) return;
+    if (!session || !prev || !last || busy) return;
     setBusy(true);
     try {
       await app.reviews.undo(prev.logId);
       setSession(undoAnswer(session));
+      void afterReview(cacheTargetsAfterUndo(last, folderId));
       setLast(null);
-      invalidate();
     } finally {
       setBusy(false);
     }

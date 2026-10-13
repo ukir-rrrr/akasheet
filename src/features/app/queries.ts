@@ -4,19 +4,18 @@ import { useCallback } from 'react';
 import { dayEnd, dayStart } from '@/domain/scheduler/day';
 
 import { useAppData } from './AppDataProvider';
+import { keys } from './queryKeys';
+import {
+  invalidateAfterCardSave,
+  invalidateAfterCardsDelete,
+  invalidateAfterCardsMove,
+  invalidateAfterFolderCreate,
+  invalidateAfterFolderDelete,
+  invalidateAfterFolderRename,
+  invalidateAfterReview,
+} from './queryInvalidation';
 
-export const keys = {
-  folders: ['folders'] as const,
-  folder: (id: string) => ['folder', id] as const,
-  cards: (folderId: string) => ['cards', folderId] as const,
-  card: (id: string) => ['card', id] as const,
-  media: (rel: string) => ['media', rel] as const,
-  nextDue: (folderId: string | null) => ['nextDue', folderId ?? 'all'] as const,
-  preview: (cardId: string, answered: number) => ['preview', cardId, answered] as const,
-};
-
-/** Query roots derived from cards/review state (media URIs are content-addressed and never go stale). */
-const DERIVED_ROOTS = [keys.folders[0], 'folder', 'cards', 'card', 'nextDue', 'preview'] as const;
+export { keys } from './queryKeys';
 
 export function useToday() {
   const app = useAppData();
@@ -71,11 +70,26 @@ export function useMediaUri(rel: string | undefined) {
   });
 }
 
-/** Everything derived from cards/review state; call after any write. */
-export function useInvalidateAll() {
+export function useQueryInvalidation() {
   const qc = useQueryClient();
-  return useCallback(
-    () => Promise.all(DERIVED_ROOTS.map((root) => qc.invalidateQueries({ queryKey: [root] }))),
-    [qc],
-  );
+  return {
+    afterCardSave: useCallback((folderId: string) => invalidateAfterCardSave(qc, folderId), [qc]),
+    afterReview: useCallback(
+      (opts: { cardId: string; cardFolderId: string | null; scopeFolderId: string | null }) =>
+        invalidateAfterReview(qc, opts),
+      [qc],
+    ),
+    afterFolderCreate: useCallback(() => invalidateAfterFolderCreate(qc), [qc]),
+    afterFolderRename: useCallback((folderId: string) => invalidateAfterFolderRename(qc, folderId), [qc]),
+    afterFolderDelete: useCallback((folderId: string) => invalidateAfterFolderDelete(qc, folderId), [qc]),
+    afterCardsMove: useCallback(
+      (fromFolderId: string, toFolderId: string, cardIds: string[]) =>
+        invalidateAfterCardsMove(qc, fromFolderId, toFolderId, cardIds),
+      [qc],
+    ),
+    afterCardsDelete: useCallback(
+      (folderId: string, cardIds: string[]) => invalidateAfterCardsDelete(qc, folderId, cardIds),
+      [qc],
+    ),
+  };
 }
