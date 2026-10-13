@@ -24,9 +24,16 @@ import type { Rating, ReviewState } from '@/domain/scheduler/types';
 import { useAppData } from '@/features/app/AppDataProvider';
 import { keys, useCard, useQueryInvalidation } from '@/features/app/queries';
 
+import { cacheTargetsAfterAnswer, cacheTargetsAfterUndo } from './reviewSessionCache';
 import type { SessionResult } from './sessionResult';
 
-export type LastAnswerInfo = { rating: Rating; next: ReviewState; at: number };
+export type LastAnswerInfo = {
+  cardId: string;
+  cardFolderId: string | null;
+  rating: Rating;
+  next: ReviewState;
+  at: number;
+};
 
 export type CardView = {
   kind: 'card';
@@ -144,12 +151,15 @@ export function useReviewSession(folderId: string | null, onlyCardIds: string[] 
       setSession(
         resumePending(applyAnswer(session, { cardId, rating, logId: res.logId }, res.next.dueAt), now),
       );
-      setLast({ rating, next: res.next, at: now });
-      void afterReview({
+      const lastAnswer: LastAnswerInfo = {
         cardId,
         cardFolderId: card.data?.folderId ?? null,
-        scopeFolderId: folderId,
-      });
+        rating,
+        next: res.next,
+        at: now,
+      };
+      setLast(lastAnswer);
+      void afterReview(cacheTargetsAfterAnswer(cardId, lastAnswer.cardFolderId, folderId));
     } finally {
       setBusy(false);
     }
@@ -157,17 +167,13 @@ export function useReviewSession(folderId: string | null, onlyCardIds: string[] 
 
   const undo = async () => {
     const prev = session ? lastAnswer(session) : undefined;
-    if (!session || !prev || busy) return;
+    if (!session || !prev || !last || busy) return;
     setBusy(true);
     try {
       await app.reviews.undo(prev.logId);
       setSession(undoAnswer(session));
+      void afterReview(cacheTargetsAfterUndo(last, folderId));
       setLast(null);
-      void afterReview({
-        cardId: prev.cardId,
-        cardFolderId: card.data?.folderId ?? null,
-        scopeFolderId: folderId,
-      });
     } finally {
       setBusy(false);
     }
