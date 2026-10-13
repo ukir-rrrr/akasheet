@@ -29,12 +29,25 @@ export function createReviewLaunch(input: Omit<ReviewLaunch, 'key'>): ReviewLaun
 
 const reviewLaunchHandoff = createHandoff<ReviewLaunch>();
 
-/** Last launch consumed by the review route (survives React StrictMode remount / double init). */
+/** Last launch consumed this mount (StrictMode runs `useState` init twice in the same synchronous turn). */
 let routeConsumedLaunch: ReviewLaunch | null = null;
+let allowStrictModeReplay = false;
+let strictModeClearScheduled = false;
+
+function scheduleEndStrictModeConsumeWindow() {
+  if (strictModeClearScheduled) return;
+  strictModeClearScheduled = true;
+  queueMicrotask(() => {
+    strictModeClearScheduled = false;
+    allowStrictModeReplay = false;
+    routeConsumedLaunch = null;
+  });
+}
 
 export const reviewLaunch = {
   set(launch: ReviewLaunch) {
     routeConsumedLaunch = null;
+    allowStrictModeReplay = false;
     reviewLaunchHandoff.set(launch);
   },
   peek(): ReviewLaunch | null {
@@ -45,14 +58,20 @@ export const reviewLaunch = {
   },
 };
 
-/** Read the pending launch for route resolution; safe to call more than once before the next `set`. */
+/** Read the pending launch for route resolution; safe to call twice in the same sync turn (StrictMode). */
 export function consumeReviewLaunch(): ReviewLaunch | null {
   const pending = reviewLaunchHandoff.peek();
   if (pending) {
     routeConsumedLaunch = reviewLaunchHandoff.take();
+    allowStrictModeReplay = true;
+    scheduleEndStrictModeConsumeWindow();
     return routeConsumedLaunch;
   }
-  return routeConsumedLaunch;
+  if (allowStrictModeReplay && routeConsumedLaunch) {
+    return routeConsumedLaunch;
+  }
+  routeConsumedLaunch = null;
+  return null;
 }
 
 export type ReviewRouteParams = { folderId?: string; ids?: string };

@@ -54,6 +54,21 @@ describe('consumeReviewLaunch', () => {
     expect(reviewLaunch.peek()).toBeNull();
   });
 
+  it('does not reuse a consumed launch after the StrictMode window (deep link / remount)', async () => {
+    const launch = createReviewLaunch({
+      folderId: 'folder-a',
+      folderName: '日本史',
+      onlyCardIds: ['card-replay'],
+    });
+    reviewLaunch.set(launch);
+    expect(consumeReviewLaunch()).toEqual(launch);
+    await Promise.resolve();
+    expect(consumeReviewLaunch()).toBeNull();
+    const fromUrl = resolveReviewRoute(null, { folderId: 'other-folder', ids: 'x,y' });
+    expect(fromUrl.folderId).toBe('other-folder');
+    expect(fromUrl.onlyCardIds).toEqual(['x', 'y']);
+  });
+
   it('clears the sticky launch when a new launch is set', () => {
     const first = createReviewLaunch({
       folderId: 'f1',
