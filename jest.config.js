@@ -1,6 +1,7 @@
 /** Domain and data layers are pure TypeScript, so they run in a plain node environment. */
 module.exports = {
   testEnvironment: 'node',
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   roots: ['<rootDir>/src'],
   testMatch: ['**/*.test.ts'],
   transform: { '^.+\\.[jt]sx?$': 'babel-jest' },
@@ -14,6 +15,11 @@ module.exports = {
     '!src/data/media/**',
     'src/data/media/store.ts',
     'src/data/media/types.ts',
+    'src/data/security/**/*.ts',
+    '!src/data/security/**/*.test.ts',
+    '!src/data/security/dek.defaults.ts',
+    '!src/data/security/encryptedMediaBackend.ts',
+    '!src/data/security/mediaAtRest.ts',
   ],
   coverageThreshold: {
     './src/data/': { lines: 90, branches: 80, functions: 90, statements: 90 },

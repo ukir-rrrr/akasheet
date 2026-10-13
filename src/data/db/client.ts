@@ -4,16 +4,28 @@ import { openDatabaseAsync } from 'expo-sqlite';
 
 import { sm2b } from '@/domain/scheduler/sm2b';
 import { deviceTimeZone, systemClock, type Clock } from '@/shared/clock';
+import { DataProtectionError } from '@/shared/errors';
 import { createIdGenerator } from '@/shared/id';
 
-import { mediaStore } from '../media/mediaStore';
-import type { MediaStore } from '../media/store';
+import { platformBackend } from '../media/backend';
+import { createMediaStore, type MediaStore } from '../media/store';
 import { createCardRepo, type CardRepo } from '../repos/cardRepo';
 import type { RepoContext } from '../repos/context';
 import { createFolderRepo, type FolderRepo } from '../repos/folderRepo';
 import { createMediaRepo } from '../repos/mediaRepo';
 import { createMetaRepo, type MetaRepo } from '../repos/metaRepo';
 import { createReviewRepo, type ReviewRepo } from '../repos/reviewRepo';
+import { defaultDekDeps } from '../security/dek.defaults';
+import { loadOrCreateDataKey } from '../security/dek';
+import { createEncryptedMediaBackend } from '../security/encryptedMediaBackend';
+import { createFieldProtector, plaintextFieldProtector } from '../security/fieldProtector';
+import { migrateAtRest } from '../security/migrateAtRest';
+import { canMutateLocalData, type DataProtection } from '../security/protection';
+import {
+  guardCardsWhenReadOnly,
+  guardFoldersWhenReadOnly,
+  guardReviewsWhenReadOnly,
+} from '../security/readOnlyGuard';
 import { runMaintenance, saveCard, type SaveCardInput } from '../services';
 import { createExpoDriver } from './expoDriver';
 import { migrate } from './migrate';
@@ -24,6 +36,7 @@ export const DB_NAME = 'akasheet.db';
 export type AppData = {
   clock: Clock;
   timeZone: () => string;
+  protection: DataProtection;
   folders: FolderRepo;
   cards: CardRepo;
   reviews: ReviewRepo;
@@ -52,6 +65,21 @@ export async function openAppData(): Promise<AppData> {
   for (const p of pragmas) await raw.execAsync(p);
   const db = createExpoDriver(raw);
   await migrate(db, { beforeMigrate: (v) => backupDatabase(raw.databasePath, v) });
+
+  const dekResult = await loadOrCreateDataKey({
+    ...defaultDekDeps,
+    randomBytes: (n) => Crypto.getRandomBytes(n),
+  });
+  const protection: DataProtection = dekResult.ok
+    ? { mode: 'full', storage: dekResult.storage }
+    : { mode: 'read-only', storage: null };
+
+  const fields = dekResult.ok ? createFieldProtector(dekResult.key) : plaintextFieldProtector;
+  const mediaBackend = dekResult.ok
+    ? createEncryptedMediaBackend(platformBackend, dekResult.key)
+    : platformBackend;
+  const store = createMediaStore(mediaBackend);
+
   const newId = createIdGenerator(systemClock, (n) => Crypto.getRandomBytes(n));
   const meta = createMetaRepo(db);
   const ctx: RepoContext = {
@@ -61,18 +89,50 @@ export async function openAppData(): Promise<AppData> {
     deviceId: await meta.ensureDeviceId(newId),
     timeZone: deviceTimeZone,
     scheduler: sm2b,
+    fields,
   };
-  const cards = createCardRepo(ctx);
+
+  if (dekResult.ok) {
+    try {
+      await migrateAtRest({
+        db,
+        meta,
+        mediaBackend: platformBackend,
+        dek: dekResult.key,
+        fields,
+        platformOs: Platform.OS,
+      });
+    } catch {
+      // Do not block startup; legacy plaintext may remain until the next launch.
+    }
+  }
+
+  const mutate = canMutateLocalData(protection);
+  const cards = guardCardsWhenReadOnly(createCardRepo(ctx), mutate);
   const media = createMediaRepo(ctx);
+  const folders = guardFoldersWhenReadOnly(createFolderRepo(ctx), mutate);
+  const reviews = guardReviewsWhenReadOnly(createReviewRepo(ctx), mutate);
+
   return {
     clock: ctx.clock,
     timeZone: ctx.timeZone,
-    folders: createFolderRepo(ctx),
+    protection,
+    folders,
     cards,
-    reviews: createReviewRepo(ctx),
+    reviews,
     meta,
-    images: mediaStore,
-    saveCard: (input) => saveCard({ cards, store: mediaStore }, input),
-    runMaintenance: () => runMaintenance({ media, store: mediaStore, clock: ctx.clock }),
+    images: store,
+    saveCard: (input) => {
+      if (!mutate) {
+        throw new DataProtectionError(
+          'この端末ではデータ保護キーを利用できないため、新しいカードや変更を保存できません。',
+        );
+      }
+      return saveCard({ cards, store }, input);
+    },
+    runMaintenance: () => {
+      if (!mutate) return Promise.resolve({ purged: 0, removedFiles: 0 });
+      return runMaintenance({ media, store, clock: ctx.clock });
+    },
   };
 }

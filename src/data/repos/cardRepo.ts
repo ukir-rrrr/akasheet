@@ -62,10 +62,13 @@ type MaskRow = {
 
 type ListMaskRow = { id: string; card_id: string; ord: number; geometry: string };
 
-function decodeListMasks(rows: ListMaskRow[]): MaskDraw[] {
+async function decodeListMasks(
+  rows: ListMaskRow[],
+  openField: (s: string) => Promise<string>,
+): Promise<MaskDraw[]> {
   const masks: MaskDraw[] = [];
   for (const r of rows) {
-    const geometry = decodeGeometry(r.geometry);
+    const geometry = decodeGeometry(await openField(r.geometry));
     if (!geometry) {
       console.warn(`mask ${r.id} has invalid geometry and was skipped`);
       continue;
@@ -75,11 +78,14 @@ function decodeListMasks(rows: ListMaskRow[]): MaskDraw[] {
   return masks;
 }
 
-function decodeMasks(rows: MaskRow[]): { masks: Mask[]; invalid: number } {
+async function decodeMasks(
+  rows: MaskRow[],
+  openField: (s: string) => Promise<string>,
+): Promise<{ masks: Mask[]; invalid: number }> {
   const masks: Mask[] = [];
   let invalid = 0;
   for (const r of rows) {
-    const geometry = decodeGeometry(r.geometry);
+    const geometry = decodeGeometry(await openField(r.geometry));
     if (!geometry) {
       invalid++;
       console.warn(`mask ${r.id} has invalid geometry and was skipped`);
@@ -111,7 +117,18 @@ async function insertMasks(
     await tx.run(
       `INSERT INTO masks (id, card_id, ord, geometry, bbox_x, bbox_y, bbox_w, bbox_h, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [ctx.newId(), cardId, ord, encodeGeometry(geoms[i]), b.x, b.y, b.w, b.h, now, now],
+      [
+        ctx.newId(),
+        cardId,
+        ord,
+        await ctx.fields.seal(encodeGeometry(geoms[i])),
+        b.x,
+        b.y,
+        b.w,
+        b.h,
+        now,
+        now,
+      ],
     );
   }
 }
@@ -159,7 +176,16 @@ export function createCardRepo(ctx: RepoContext) {
         await tx.run(
           `INSERT INTO cards (id, folder_id, media_id, title, source, created_device_id, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [cardId, input.folderId, mediaId, input.title ?? null, input.source, ctx.deviceId, now, now],
+          [
+            cardId,
+            input.folderId,
+            mediaId,
+            input.title != null ? await ctx.fields.seal(input.title) : null,
+            input.source,
+            ctx.deviceId,
+            now,
+            now,
+          ],
         );
         await insertMasks(tx, ctx, cardId, input.masks, input.media, now);
         await insertInitialState(tx, ctx.scheduler, cardId, now);
@@ -196,15 +222,19 @@ export function createCardRepo(ctx: RepoContext) {
       );
       const byCard = new Map<string, ListMaskRow[]>();
       for (const r of maskRows) byCard.set(r.card_id, [...(byCard.get(r.card_id) ?? []), r]);
-      return rows.map((r) => ({
-        id: r.id,
-        title: r.title,
-        createdAt: r.created_at,
-        phase: r.phase,
-        dueAt: r.due_at,
-        media: { thumbPath: r.thumb_path, width: r.width, height: r.height },
-        masks: decodeListMasks(byCard.get(r.id) ?? []),
-      }));
+      const summaries: CardSummary[] = [];
+      for (const r of rows) {
+        summaries.push({
+          id: r.id,
+          title: r.title != null ? await ctx.fields.open(r.title) : null,
+          createdAt: r.created_at,
+          phase: r.phase,
+          dueAt: r.due_at,
+          media: { thumbPath: r.thumb_path, width: r.width, height: r.height },
+          masks: await decodeListMasks(byCard.get(r.id) ?? [], (s) => ctx.fields.open(s)),
+        });
+      }
+      return summaries;
     },
 
     async get(cardId: string): Promise<CardDetail | null> {
@@ -229,11 +259,11 @@ export function createCardRepo(ctx: RepoContext) {
          FROM masks WHERE card_id = ? AND deleted_at IS NULL ORDER BY ord`,
         [cardId],
       );
-      const { masks, invalid } = decodeMasks(maskRows);
+      const { masks, invalid } = await decodeMasks(maskRows, (s) => ctx.fields.open(s));
       return {
         id: r.id,
         folderId: r.folder_id,
-        title: r.title,
+        title: r.title != null ? await ctx.fields.open(r.title) : null,
         createdAt: r.created_at,
         media: { path: r.path, thumbPath: r.thumb_path, width: r.width, height: r.height },
         masks,

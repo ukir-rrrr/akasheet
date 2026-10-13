@@ -5,6 +5,7 @@ import { ValidationError } from '@/shared/errors';
 import { createIdGenerator } from '@/shared/id';
 import { sm2b } from '@/domain/scheduler/sm2b';
 
+import { plaintextFieldProtector } from '../security/fieldProtector';
 import { migrate, userVersion } from '../db/migrate';
 import { LATEST_VERSION, MIGRATIONS } from '../db/migrations';
 import { createBetterSqliteDriver } from '../db/testing/betterSqliteDriver';
@@ -52,6 +53,7 @@ async function setup() {
     deviceId: 'device-1',
     timeZone: () => TZ,
     scheduler: sm2b,
+    fields: plaintextFieldProtector,
   };
   return {
     db,
