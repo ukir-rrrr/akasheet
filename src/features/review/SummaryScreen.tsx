@@ -10,7 +10,7 @@ import { formatDateTime, formatShortDate } from '@/ui/format';
 import { AppText, Button, PressableScale } from '@/ui/primitives';
 import { heights, radius, useTheme } from '@/ui/theme';
 
-import { ALL_FOLDERS } from './constants';
+import { replaceReview } from './reviewNavigation';
 import { sessionResult, type SessionResult } from './sessionResult';
 import { SM2B } from '@/domain/scheduler/sm2b';
 
@@ -206,9 +206,10 @@ export function SummaryScreen() {
             kind="ghost"
             icon="refresh"
             onPress={() =>
-              router.replace({
-                pathname: '/review/[folderId]',
-                params: { folderId: result.folderId ?? ALL_FOLDERS, ids: result.againIds.join(',') },
+              replaceReview({
+                folderId: result.folderId,
+                folderName: result.folderName,
+                onlyCardIds: result.againIds,
               })
             }
           />

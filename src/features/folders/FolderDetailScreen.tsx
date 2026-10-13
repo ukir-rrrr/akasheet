@@ -147,6 +147,7 @@ export function FolderDetailScreen({ folderId }: { folderId: string }) {
           <>
             <FolderReviewSection
               folderId={folderId}
+              folderName={folder.data?.name ?? ''}
               dueCount={due}
               totalCount={all.length}
               nextDueAt={nextDue.data}

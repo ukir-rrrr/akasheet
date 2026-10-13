@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FolderSummary } from '@/data/repos/folderRepo';
 import { flash, useFlash } from '@/features/app/flash';
 import { useFolders, useNextDue, useToday } from '@/features/app/queries';
-import { ALL_FOLDERS } from '@/features/review/constants';
+import { pushReview } from '@/features/review/reviewNavigation';
 import { CaptureDock } from '@/ui/Dock';
 import { formatCount, formatHeaderDate, formatRelativeDay, formatShortDate } from '@/ui/format';
 import {
@@ -83,7 +83,11 @@ export function FolderListScreen() {
               <Button
                 label="まとめて復習 ›"
                 onPress={() =>
-                  router.push({ pathname: '/review/[folderId]', params: { folderId: ALL_FOLDERS } })
+                  pushReview({
+                    folderId: null,
+                    folderName: 'すべてのフォルダ',
+                    onlyCardIds: null,
+                  })
                 }
                 testID="review-all"
               />

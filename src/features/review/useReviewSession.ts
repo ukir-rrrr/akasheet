@@ -59,7 +59,7 @@ export type ReviewView =
  * Binds the pure session state machine to persistence: every answer is written (log + state, atomically)
  * before the session advances; undo reverts the DB first, then restores the previous session state.
  */
-export function useReviewSession(folderId: string | null, onlyCardIds: string[] | null) {
+export function useReviewSession(folderId: string | null, onlyCardIds: string[] | null, launchKey: string) {
   const app = useAppData();
   const { afterReview } = useQueryInvalidation();
   const [session, setSession] = useState<SessionState | null>(null);
@@ -69,13 +69,16 @@ export function useReviewSession(folderId: string | null, onlyCardIds: string[] 
   const [last, setLast] = useState<LastAnswerInfo | null>(null);
   const [startedAt] = useState(() => app.clock.now());
   const shownAt = useRef(startedAt);
-  const idsKey = onlyCardIds?.join(',') ?? '';
+  const replayIdsKey = onlyCardIds?.join('\0') ?? '';
 
   useEffect(() => {
     let alive = true;
     const build = async () => {
       // 「まだを もう一度」 replays exactly the given cards, so the daily new-card limit does not apply.
-      if (idsKey) return startSession(await app.reviews.queueFor(idsKey.split(',')), Infinity);
+      const replayCardIds = replayIdsKey ? replayIdsKey.split('\0') : [];
+      if (replayCardIds.length > 0) {
+        return startSession(await app.reviews.queueFor(replayCardIds), Infinity);
+      }
       const now = app.clock.now();
       const tz = app.timeZone();
       const items = await app.reviews.queue(folderId, dayEnd(now, tz));
@@ -93,7 +96,7 @@ export function useReviewSession(folderId: string | null, onlyCardIds: string[] 
     return () => {
       alive = false;
     };
-  }, [app, folderId, idsKey, attempt]);
+  }, [app, folderId, replayIdsKey, launchKey, attempt]);
 
   const cardId = session ? currentCard(session) : undefined;
   const card = useCard(cardId);
