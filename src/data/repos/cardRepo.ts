@@ -1,7 +1,7 @@
 import { decodeGeometry, encodeGeometry, isValidGeometry } from '@/domain/mask/codec';
 import { geometryBBox } from '@/domain/mask/geometry';
 import { readingOrder } from '@/domain/mask/order';
-import type { Mask, MaskGeometry, Size } from '@/domain/mask/types';
+import type { Mask, MaskDraw, MaskGeometry, Size } from '@/domain/mask/types';
 import type { Phase } from '@/domain/scheduler/types';
 import { ValidationError } from '@/shared/errors';
 
@@ -23,16 +23,17 @@ export type NewCard = {
 };
 
 export type CardMedia = { path: string; thumbPath: string; width: number; height: number };
+export type CardListMedia = { thumbPath: string; width: number; height: number };
 
+/** Folder card list row — no full-res path, review timestamps, or mask bboxes. */
 export type CardSummary = {
   id: string;
   title: string | null;
   createdAt: number;
   phase: Phase;
   dueAt: number;
-  lastReviewedAt: number | null;
-  media: CardMedia;
-  masks: Mask[];
+  media: CardListMedia;
+  masks: MaskDraw[];
 };
 
 export type CardDetail = {
@@ -58,6 +59,21 @@ type MaskRow = {
   bbox_w: number;
   bbox_h: number;
 };
+
+type ListMaskRow = { id: string; card_id: string; ord: number; geometry: string };
+
+function decodeListMasks(rows: ListMaskRow[]): MaskDraw[] {
+  const masks: MaskDraw[] = [];
+  for (const r of rows) {
+    const geometry = decodeGeometry(r.geometry);
+    if (!geometry) {
+      console.warn(`mask ${r.id} has invalid geometry and was skipped`);
+      continue;
+    }
+    masks.push({ id: r.id, geometry });
+  }
+  return masks;
+}
 
 function decodeMasks(rows: MaskRow[]): { masks: Mask[]; invalid: number } {
   const masks: Mask[] = [];
@@ -158,14 +174,12 @@ export function createCardRepo(ctx: RepoContext) {
         created_at: number;
         phase: Phase;
         due_at: number;
-        last_reviewed_at: number | null;
-        path: string;
         thumb_path: string;
         width: number;
         height: number;
       }>(
-        `SELECT c.id, c.title, c.created_at, rs.phase, rs.due_at, rs.last_reviewed_at,
-                m.path, m.thumb_path, m.width, m.height
+        `SELECT c.id, c.title, c.created_at, rs.phase, rs.due_at,
+                m.thumb_path, m.width, m.height
          FROM cards c
          JOIN review_states rs ON rs.card_id = c.id
          JOIN media m ON m.id = c.media_id
@@ -173,14 +187,14 @@ export function createCardRepo(ctx: RepoContext) {
          ORDER BY c.created_at DESC`,
         [folderId],
       );
-      const maskRows = await db.all<MaskRow>(
-        `SELECT mk.id, mk.card_id, mk.ord, mk.geometry, mk.bbox_x, mk.bbox_y, mk.bbox_w, mk.bbox_h
+      const maskRows = await db.all<ListMaskRow>(
+        `SELECT mk.id, mk.card_id, mk.ord, mk.geometry
          FROM masks mk JOIN cards c ON c.id = mk.card_id
          WHERE c.folder_id = ? AND c.deleted_at IS NULL AND mk.deleted_at IS NULL
          ORDER BY mk.card_id, mk.ord`,
         [folderId],
       );
-      const byCard = new Map<string, MaskRow[]>();
+      const byCard = new Map<string, ListMaskRow[]>();
       for (const r of maskRows) byCard.set(r.card_id, [...(byCard.get(r.card_id) ?? []), r]);
       return rows.map((r) => ({
         id: r.id,
@@ -188,9 +202,8 @@ export function createCardRepo(ctx: RepoContext) {
         createdAt: r.created_at,
         phase: r.phase,
         dueAt: r.due_at,
-        lastReviewedAt: r.last_reviewed_at,
-        media: { path: r.path, thumbPath: r.thumb_path, width: r.width, height: r.height },
-        masks: decodeMasks(byCard.get(r.id) ?? []).masks,
+        media: { thumbPath: r.thumb_path, width: r.width, height: r.height },
+        masks: decodeListMasks(byCard.get(r.id) ?? []),
       }));
     },
 

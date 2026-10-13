@@ -11,3 +11,5 @@ export type Size = { width: number; height: number };
 export type BBox = { x: number; y: number; w: number; h: number };
 
 export type Mask = { id: string; ord: number; geometry: MaskGeometry; bbox: BBox };
+/** Enough to render a filled mask overlay (e.g. list thumbnails). */
+export type MaskDraw = { id: string; geometry: MaskGeometry };

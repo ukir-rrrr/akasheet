@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 
 import { fitContain } from '@/domain/mask/transform';
-import type { Mask, Size } from '@/domain/mask/types';
+import type { MaskDraw, Size } from '@/domain/mask/types';
 import { useMediaUri } from '@/features/app/queries';
 import { useTheme } from '@/ui/theme';
 
@@ -18,7 +18,7 @@ export function MaskThumb({
 }: {
   rel: string;
   img: Size;
-  masks: Mask[];
+  masks: MaskDraw[];
   style?: StyleProp<ViewStyle>;
 }) {
   const { c } = useTheme();

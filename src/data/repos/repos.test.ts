@@ -189,7 +189,15 @@ describe('cardRepo', () => {
     expect(second.mediaId).toBe(first.mediaId);
     const list = await cards.listByFolder(f.id);
     expect(list).toHaveLength(2);
-    expect(list.find((c) => c.id === first.cardId)?.masks).toHaveLength(2);
+    const listed = list.find((c) => c.id === first.cardId);
+    expect(listed?.masks).toHaveLength(2);
+    expect(listed?.masks[0]).toEqual(expect.objectContaining({ geometry: expect.any(Object) }));
+    expect(listed?.media).toEqual({
+      thumbPath: expect.any(String),
+      width: 1536,
+      height: 2048,
+    });
+    expect(listed).not.toHaveProperty('lastReviewedAt');
   });
 
   it('rejects zero masks, absolute paths and missing folders', async () => {
@@ -261,6 +269,23 @@ describe('cardRepo', () => {
     const detail = await cards.get(cardId);
     expect(detail?.masks).toHaveLength(1);
     expect(detail?.invalidMaskCount).toBe(1);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('listByFolder skips invalid mask geometry like get()', async () => {
+    const { db, folders, cards } = await setup();
+    const f = await folders.create('x');
+    const { cardId } = await cards.create({
+      folderId: f.id,
+      media: media(),
+      masks: [rect, stroke],
+      source: 'library',
+    });
+    await db.run('UPDATE masks SET geometry = \'{"v":9}\' WHERE card_id = ? AND ord = 0', [cardId]);
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const list = await cards.listByFolder(f.id);
+    expect(list.find((c) => c.id === cardId)?.masks).toHaveLength(1);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
