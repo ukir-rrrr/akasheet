@@ -1,4 +1,5 @@
 import { MissingAssetError } from '@/shared/errors';
+import { logMediaGcFailure } from '@/shared/log';
 
 import {
   JPEG_QUALITY,
@@ -80,10 +81,16 @@ export function createMediaStore(backend: MediaBackend) {
         if (livePaths.has(key)) continue;
         try {
           assertSafeMediaKey(key);
-        } catch {
+        } catch (e) {
+          logMediaGcFailure({ step: 'validate-key', key, error: e });
           continue;
         }
-        await backend.remove(key);
+        try {
+          await backend.remove(key);
+        } catch (e) {
+          logMediaGcFailure({ step: 'delete-file', key, error: e });
+          continue;
+        }
         removed++;
       }
       return removed;
