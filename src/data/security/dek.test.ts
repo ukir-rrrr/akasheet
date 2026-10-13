@@ -55,4 +55,24 @@ describe('loadOrCreateDataKey', () => {
     );
     expect(res).toEqual({ ok: false, reason: 'unavailable' });
   });
+
+  it('does not mint a new DEK when protected data exists but the key is gone', async () => {
+    const res = await loadOrCreateDataKey(
+      deps({
+        platformOs: 'ios',
+        isSecureAvailable: async () => true,
+        hasProtectedData: async () => true,
+      }),
+    );
+    expect(res).toEqual({ ok: false, reason: 'unavailable' });
+  });
+
+  it('does not mint a web DEK when protected data exists but KV is empty', async () => {
+    const res = await loadOrCreateDataKey(
+      deps({
+        hasProtectedData: async () => true,
+      }),
+    );
+    expect(res).toEqual({ ok: false, reason: 'unavailable' });
+  });
 });

@@ -83,7 +83,63 @@ describe('migrateAtRest', () => {
     ).toEqual({
       mediaEncrypted: 0,
       fieldsEncrypted: false,
+      completed: true,
     });
+  });
+
+  it('seals plaintext that only starts with enc1: prefix', async () => {
+    const key = await importAesKey(createHash('sha256').update('dek2').digest());
+    const fields = createFieldProtector(key);
+    const db = createBetterSqliteDriver();
+    await migrate(db);
+    const meta = createMetaRepo(db);
+    const decoy = 'enc1:not-a-real-ciphertext';
+    await db.run(
+      'INSERT INTO folders (id, name, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, 1, 1, 1)',
+      ['f-decoy', decoy, 'ai'],
+    );
+
+    const { backend } = memoryBackend();
+    const res = await migrateAtRest({ db, meta, mediaBackend: backend, dek: key, fields, platformOs: 'web' });
+    expect(res.completed).toBe(true);
+
+    const row = await db.get<{ name: string }>('SELECT name FROM folders WHERE id = ?', ['f-decoy']);
+    expect(isSealedField(row!.name)).toBe(true);
+    expect(await fields.open(row!.name)).toBe(decoy);
+  });
+
+  it('does not mark migration complete when media encryption fails', async () => {
+    const key = await importAesKey(createHash('sha256').update('dek3').digest());
+    const fields = createFieldProtector(key);
+    const db = createBetterSqliteDriver();
+    await migrate(db);
+    const meta = createMetaRepo(db);
+    const { backend, store } = memoryBackend();
+    const { path } = mediaPaths('e'.repeat(64));
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0x00]).toString('base64');
+    store.set('src', jpeg);
+    await backend.putIfAbsent(path, 'src');
+
+    const failingBackend: MediaBackend = {
+      ...backend,
+      async keys() {
+        return [path];
+      },
+      async readBytes() {
+        throw new Error('io fail');
+      },
+    };
+
+    const res = await migrateAtRest({
+      db,
+      meta,
+      mediaBackend: failingBackend,
+      dek: key,
+      fields,
+      platformOs: 'web',
+    });
+    expect(res.completed).toBe(false);
+    expect((await meta.get(DATA_PROTECTION_META)) ?? null).toBeNull();
   });
 
   it('encryptMediaFileInPlace is idempotent on web', async () => {

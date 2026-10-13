@@ -18,8 +18,9 @@ import { createReviewRepo, type ReviewRepo } from '../repos/reviewRepo';
 import { defaultDekDeps } from '../security/dek.defaults';
 import { loadOrCreateDataKey } from '../security/dek';
 import { createEncryptedMediaBackend } from '../security/encryptedMediaBackend';
-import { createFieldProtector, plaintextFieldProtector } from '../security/fieldProtector';
+import { createFieldProtector, readOnlyFieldProtector } from '../security/fieldProtector';
 import { migrateAtRest } from '../security/migrateAtRest';
+import { detectProtectedData } from '../security/protectedData';
 import { canMutateLocalData, type DataProtection } from '../security/protection';
 import {
   guardCardsWhenReadOnly,
@@ -66,22 +67,24 @@ export async function openAppData(): Promise<AppData> {
   const db = createExpoDriver(raw);
   await migrate(db, { beforeMigrate: (v) => backupDatabase(raw.databasePath, v) });
 
+  const meta = createMetaRepo(db);
   const dekResult = await loadOrCreateDataKey({
     ...defaultDekDeps,
     randomBytes: (n) => Crypto.getRandomBytes(n),
+    hasProtectedData: () =>
+      detectProtectedData({ db, meta, mediaBackend: platformBackend, platformOs: Platform.OS }),
   });
   const protection: DataProtection = dekResult.ok
     ? { mode: 'full', storage: dekResult.storage }
     : { mode: 'read-only', storage: null };
 
-  const fields = dekResult.ok ? createFieldProtector(dekResult.key) : plaintextFieldProtector;
+  const fields = dekResult.ok ? createFieldProtector(dekResult.key) : readOnlyFieldProtector;
   const mediaBackend = dekResult.ok
     ? createEncryptedMediaBackend(platformBackend, dekResult.key)
     : platformBackend;
   const store = createMediaStore(mediaBackend);
 
   const newId = createIdGenerator(systemClock, (n) => Crypto.getRandomBytes(n));
-  const meta = createMetaRepo(db);
   const ctx: RepoContext = {
     db,
     clock: systemClock,

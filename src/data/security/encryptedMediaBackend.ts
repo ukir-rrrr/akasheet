@@ -9,6 +9,18 @@ import { b64, fromB64, WEB_WRAP_PREFIX } from './mediaAtRest';
 
 const CACHE_URI_PREFIX = 'akasheet-decrypt:';
 
+export async function purgeNativeDecryptCache(mediaKey: string): Promise<void> {
+  const cacheKey = CACHE_URI_PREFIX + mediaKey;
+  const cached = await Storage.getItem(cacheKey);
+  if (cached) {
+    const fromKv = new File(cached);
+    if (fromKv.exists) fromKv.delete();
+  }
+  const cacheFile = new File(Paths.cache, `akasheet-media/${mediaKey.replace(/\//g, '_')}.jpg`);
+  if (cacheFile.exists) cacheFile.delete();
+  await Storage.removeItem(cacheKey);
+}
+
 /** Wraps a platform backend so blobs on disk / in KV are AES-GCM encrypted. */
 export function createEncryptedMediaBackend(inner: MediaBackend, key: CryptoKey): MediaBackend {
   return {
@@ -43,7 +55,11 @@ export function createEncryptedMediaBackend(inner: MediaBackend, key: CryptoKey)
       return true;
     },
 
-    remove: (mediaKey) => inner.remove(mediaKey),
+    async remove(mediaKey) {
+      assertSafeMediaKey(mediaKey);
+      if (Platform.OS !== 'web') await purgeNativeDecryptCache(mediaKey);
+      await inner.remove(mediaKey);
+    },
     keys: () => inner.keys(),
 
     async uriFor(mediaKey) {

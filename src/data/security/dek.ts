@@ -16,6 +16,8 @@ export type DekDeps = {
   webKvGet: (key: string) => Promise<string | null>;
   webKvSet: (key: string, value: string) => Promise<void>;
   randomBytes: (n: number) => Uint8Array;
+  /** When true, a missing DEK must not be replaced with a new random key. */
+  hasProtectedData?: () => Promise<boolean>;
 };
 
 function b64(bytes: Uint8Array): string {
@@ -33,19 +35,28 @@ function fromB64(text: string): Uint8Array {
   return out;
 }
 
+async function mustNotCreateFreshKey(deps: DekDeps): Promise<boolean> {
+  return deps.hasProtectedData ? await deps.hasProtectedData() : false;
+}
+
 /** Loads a 256-bit DEK from Secure Store (native) or the web KV fallback. */
 export async function loadOrCreateDataKey(deps: DekDeps): Promise<DataKey> {
   if (deps.platformOs === 'web') {
     const existing = await deps.webKvGet(WEB_KV_KEY);
-    const raw = existing ? fromB64(existing) : deps.randomBytes(32);
-    if (!existing) await deps.webKvSet(WEB_KV_KEY, b64(raw));
-    return { ok: true, key: await importAesKey(raw), storage: 'web-kv' };
+    if (!existing) {
+      if (await mustNotCreateFreshKey(deps)) return { ok: false, reason: 'unavailable' };
+      const raw = deps.randomBytes(32);
+      await deps.webKvSet(WEB_KV_KEY, b64(raw));
+      return { ok: true, key: await importAesKey(raw), storage: 'web-kv' };
+    }
+    return { ok: true, key: await importAesKey(fromB64(existing)), storage: 'web-kv' };
   }
 
   if (!(await deps.isSecureAvailable())) return { ok: false, reason: 'unavailable' };
 
   let encoded = await deps.secureGet(SECURE_KEY);
   if (!encoded) {
+    if (await mustNotCreateFreshKey(deps)) return { ok: false, reason: 'unavailable' };
     encoded = b64(deps.randomBytes(32));
     await deps.secureSet(SECURE_KEY, encoded);
   }

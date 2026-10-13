@@ -19,7 +19,7 @@ function fromB64(text: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-async function storedBytes(
+export async function storedBytesForKey(
   inner: MediaBackend,
   mediaKey: string,
   platformOs: string,
@@ -40,16 +40,24 @@ export async function encryptMediaFileInPlace(
   platformOs: string,
 ): Promise<boolean> {
   assertSafeMediaKey(mediaKey);
-  const raw = await storedBytes(inner, mediaKey, platformOs);
+  const raw = await storedBytesForKey(inner, mediaKey, platformOs);
   if (raw === null) return false;
   if (isEncryptedBlob(raw)) return false;
   if (!isPlainJpeg(raw)) return false;
 
   const enc = await encryptBytes(key, raw);
+  if (!isEncryptedBlob(enc)) return false;
 
   if (platformOs === 'web') {
+    const wrapped = WEB_WRAP_PREFIX + b64(enc);
+    const prev = await inner.uriFor(mediaKey);
     await inner.remove(mediaKey);
-    await inner.putIfAbsent(mediaKey, WEB_WRAP_PREFIX + b64(enc));
+    const ok = await inner.putIfAbsent(mediaKey, wrapped);
+    if (!ok || (await inner.uriFor(mediaKey)) !== wrapped) {
+      await inner.remove(mediaKey);
+      if (prev !== null) await inner.putIfAbsent(mediaKey, prev);
+      return false;
+    }
     return true;
   }
 
@@ -61,8 +69,17 @@ export async function encryptMediaFileInPlace(
   const tmpDir = tmp.parentDirectory;
   if (!tmpDir.exists) tmpDir.create({ intermediates: true, idempotent: true });
   tmp.write(enc);
-  dest.delete();
-  tmp.copy(dest);
+  const tmpBytes = await tmp.bytes();
+  if (!isEncryptedBlob(tmpBytes)) {
+    tmp.delete();
+    return false;
+  }
+  dest.write(tmpBytes);
+  const destBytes = await dest.bytes();
+  if (!isEncryptedBlob(destBytes)) {
+    tmp.delete();
+    return false;
+  }
   tmp.delete();
   await Storage.removeItem(`akasheet-decrypt:${mediaKey}`);
   return true;

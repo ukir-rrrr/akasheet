@@ -8,6 +8,7 @@ import {
   isEncryptedBlob,
   isPlainJpeg,
   isSealedField,
+  isValidSealedField,
   openString,
   sealString,
 } from './aead';
@@ -35,6 +36,11 @@ describe('aead', () => {
   it('seals and opens empty strings', async () => {
     const key = await testKey();
     expect(await openString(key, await sealString(key, ''))).toBe('');
+  });
+
+  it('rejects accidental enc1: plaintext as sealed', async () => {
+    expect(isValidSealedField('enc1:not-valid-base64-payload')).toBe(false);
+    expect(isValidSealedField('plain')).toBe(false);
   });
 
   it('seals and opens text fields', async () => {

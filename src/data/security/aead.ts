@@ -1,3 +1,5 @@
+import './webCrypto';
+
 /** AES-256-GCM wire format shared by on-disk media and sealed DB text fields. */
 
 export const FILE_MAGIC = new Uint8Array([0x41, 0x4b, 0x53, 0x48, 0x31]); // "AKSH1"
@@ -15,6 +17,16 @@ export function isPlainJpeg(bytes: Uint8Array): boolean {
 
 export function isSealedField(value: string): boolean {
   return value.startsWith(FIELD_PREFIX);
+}
+
+/** `enc1:` prefix plus a well-formed AKSH1 payload (not accidental plaintext). */
+export function isValidSealedField(value: string): boolean {
+  if (!isSealedField(value)) return false;
+  try {
+    return isEncryptedBlob(b64Decode(value.slice(FIELD_PREFIX.length)));
+  } catch {
+    return false;
+  }
 }
 
 function asBufferSource(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
