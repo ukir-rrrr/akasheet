@@ -20,6 +20,7 @@ import {
   Skeleton,
 } from '@/ui/primitives';
 import { heights, radius, space, useTheme } from '@/ui/theme';
+import { BuildIdCaption } from '@/ui/BuildIdCaption';
 import { Toast } from '@/ui/Toast';
 
 import { EmptyFolders } from './EmptyFolders';
@@ -158,6 +159,12 @@ export function FolderListScreen() {
           onLibrary={() => actions.startCard('library')}
         />
       )}
+      <View
+        style={[styles.buildIdSlot, { bottom: (hasFolders ? 96 : 12) + insets.bottom }]}
+        pointerEvents="none"
+      >
+        <BuildIdCaption />
+      </View>
       <Toast spec={toast} onDone={flash.clear} bottom={hasFolders ? 100 + insets.bottom : 24} />
     </View>
   );
@@ -245,5 +252,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderStyle: 'dashed',
     borderRadius: radius.lg,
+  },
+  buildIdSlot: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
 });

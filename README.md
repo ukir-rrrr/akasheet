@@ -42,6 +42,17 @@ Mac がなくても、Windows / Linux の PC と iPhone があれば動かせま
 - 社内・公衆 Wi-Fi などで端末どうしが通信できない場合は `npx expo start --tunnel` を使います。
 - 「Project is incompatible with this version of Expo Go」と出る場合は、App Store で Expo Go を最新にしてください。
 
+### 端末で動いているビルドの確認
+
+フォルダ一覧画面の下端（撮る／選ぶドックのすぐ上、または空状態では画面下）に、**ビルド ID**（短い Git コミット SHA 7 文字とアプリ版 `v1.0.0` など）が薄いグレーで表示されます。未コミットの変更があるときは `+dirty` が付きます。
+
+1. 表示されている SHA が、手元で期待しているコミット（`git rev-parse --short=7 HEAD`）と一致するか確認します。
+2. 古いバンドル（Metro キャッシュ・古い tunnel・Expo Go の残留）を疑う場合は、次を順に試します。
+   - Metro をキャッシュクリアで再起動: `npx expo start -c`
+   - tunnel を使っている場合は開発サーバーを止めてから `npx expo start --tunnel` で再開
+   - iPhone の Expo Go を完全終了してから QR を再読み取り
+3. `.git` のない tarball などでは `unknown` と表示されます（クラッシュしません）。
+
 ## ブラウザで試す
 
 ```bash

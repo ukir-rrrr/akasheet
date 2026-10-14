@@ -90,5 +90,6 @@ module.exports = defineConfig([
   {
     files: ['scripts/**/*.js', '*.config.js'],
     languageOptions: { globals: globals.node },
+    rules: { 'expo/no-dynamic-env-var': 'off' },
   },
 ]);
