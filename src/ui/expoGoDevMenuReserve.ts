@@ -1,5 +1,11 @@
-/** Expo Go (storeClient) floating dev-menu control is roughly one minimum tap target wide (UI spec: 44pt). */
-export const EXPO_GO_DEV_MENU_RESERVE = 44;
+/**
+ * Extra right inset for Expo Go's floating dev-menu gear (storeClient only).
+ *
+ * The control is ~44pt wide but on iOS it sits inset from the screen edge (e.g. on a
+ * 402pt-wide simulator the gear's left edge is at x≈344, i.e. 58pt from the right).
+ * Reserving only 44pt leaves header tap targets overlapping the gear (folder ⋯ at x=350).
+ */
+export const EXPO_GO_DEV_MENU_RESERVE = 66;
 
 export const EXPO_STORE_CLIENT_ENV = 'storeClient';
 
