@@ -129,6 +129,15 @@ describe('migrations', () => {
 });
 
 describe('folderRepo', () => {
+  it('creates nested folders via ensurePath', async () => {
+    const { folders } = await setup();
+    const leaf = await folders.ensurePath(['親', '子']);
+    const parent = await folders.findChildByName(null, '親');
+    expect(parent?.name).toBe('親');
+    const child = await folders.findChildByName(parent!.id, '子');
+    expect(child?.id).toBe(leaf);
+  });
+
   it('creates, lists with counts, renames and validates names', async () => {
     const { folders, cards, end } = await setup();
     const a = await folders.create('  日本史 ');
@@ -200,6 +209,36 @@ describe('cardRepo', () => {
       height: 2048,
     });
     expect(listed).not.toHaveProperty('lastReviewedAt');
+  });
+
+  it('stores external_id and imported review algorithm', async () => {
+    const { folders, cards, reviews, db } = await setup();
+    const f = await folders.create('import');
+    const due = T0 + 86_400_000;
+    const { cardId } = await cards.create({
+      folderId: f.id,
+      media: media('b'.repeat(64)),
+      masks: [rect],
+      source: 'import:csv',
+      externalId: 'csv-1',
+      review: {
+        phase: 'review',
+        dueAt: due,
+        intervalDays: 3,
+        ease: 2.5,
+        reps: 2,
+        lapses: 0,
+        lastReviewedAt: T0,
+      },
+    });
+    expect(await cards.findByExternal('import:csv', 'csv-1')).toEqual({ id: cardId });
+    const row = await db.get<{ algorithm: string; due_at: number }>(
+      'SELECT algorithm, due_at FROM review_states WHERE card_id = ?',
+      [cardId],
+    );
+    expect(row?.algorithm).toBe('imported');
+    expect(row?.due_at).toBe(due);
+    expect((await reviews.state(cardId)).phase).toBe('review');
   });
 
   it('rejects zero masks, absolute paths and missing folders', async () => {

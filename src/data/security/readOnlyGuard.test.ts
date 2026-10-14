@@ -10,6 +10,8 @@ describe('readOnlyGuard', () => {
       create: async () => ({ id: 'x', name: 'n', color: 'ai' as const }),
       rename: async () => undefined,
       remove: async () => undefined,
+      findChildByName: async () => null,
+      ensurePath: async () => 'x',
     };
     expect(guardFoldersWhenReadOnly(base, true)).toBe(base);
   });
@@ -21,6 +23,8 @@ describe('readOnlyGuard', () => {
       create: async () => ({ id: 'x', name: 'n', color: 'ai' as const }),
       rename: async () => undefined,
       remove: async () => undefined,
+      findChildByName: async () => null,
+      ensurePath: async () => 'x',
     };
     const ro = guardFoldersWhenReadOnly(base, false);
     await expect(ro.create('a')).rejects.toBeInstanceOf(DataProtectionError);
@@ -37,6 +41,9 @@ describe('readOnlyGuard', () => {
         get: async () => null,
         remove: async () => undefined,
         move: async () => undefined,
+        findByExternal: async () => null,
+        listExternalIds: async () => [],
+        replaceImported: async () => ({ mediaId: 'm', reusedMedia: false }),
       },
       false,
     );

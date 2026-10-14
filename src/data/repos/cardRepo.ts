@@ -14,12 +14,24 @@ import { insertInitialState } from './reviewRepo';
 
 export type CardSource = 'camera' | 'library' | 'sample' | 'import:anki' | 'import:csv';
 
+export type ImportedReviewState = {
+  phase: Phase;
+  dueAt: number;
+  intervalDays: number;
+  ease: number;
+  reps: number;
+  lapses: number;
+  lastReviewedAt: number | null;
+};
+
 export type NewCard = {
   folderId: string;
   media: NewMedia;
   masks: MaskGeometry[];
   source: CardSource;
   title?: string | null;
+  externalId?: string | null;
+  review?: ImportedReviewState | null;
 };
 
 export type CardMedia = { path: string; thumbPath: string; width: number; height: number };
@@ -101,6 +113,24 @@ async function decodeMasks(
   return { masks, invalid };
 }
 
+async function insertImportedState(tx: SqlDriver, cardId: string, review: ImportedReviewState, now: number) {
+  await tx.run(
+    `INSERT INTO review_states (card_id, algorithm, phase, due_at, interval_days, ease, reps, lapses, last_reviewed_at, updated_at)
+     VALUES (?, 'imported', ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      cardId,
+      review.phase,
+      review.dueAt,
+      review.intervalDays,
+      review.ease,
+      review.reps,
+      review.lapses,
+      review.lastReviewedAt,
+      now,
+    ],
+  );
+}
+
 async function insertMasks(
   tx: SqlDriver,
   ctx: RepoContext,
@@ -174,21 +204,23 @@ export function createCardRepo(ctx: RepoContext) {
         const { mediaId, reused } = await upsertMedia(tx, ctx, input.media, now);
         const cardId = ctx.newId();
         await tx.run(
-          `INSERT INTO cards (id, folder_id, media_id, title, source, created_device_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO cards (id, folder_id, media_id, title, source, external_id, created_device_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             cardId,
             input.folderId,
             mediaId,
             input.title != null ? await ctx.fields.seal(input.title) : null,
             input.source,
+            input.externalId ?? null,
             ctx.deviceId,
             now,
             now,
           ],
         );
         await insertMasks(tx, ctx, cardId, input.masks, input.media, now);
-        await insertInitialState(tx, ctx.scheduler, cardId, now);
+        if (input.review) await insertImportedState(tx, cardId, input.review, now);
+        else await insertInitialState(tx, ctx.scheduler, cardId, now);
         return { cardId, mediaId, reusedMedia: reused };
       });
     },
@@ -286,6 +318,61 @@ export function createCardRepo(ctx: RepoContext) {
             [now, now, ...part],
           );
         }
+      });
+    },
+
+    async findByExternal(source: CardSource, externalId: string): Promise<{ id: string } | null> {
+      const r = await db.get<{ id: string }>(
+        'SELECT id FROM cards WHERE source = ? AND external_id = ? AND deleted_at IS NULL',
+        [source, externalId],
+      );
+      return r ?? null;
+    },
+
+    async listExternalIds(source: CardSource): Promise<{ id: string; external_id: string }[]> {
+      return db.all<{ id: string; external_id: string }>(
+        'SELECT id, external_id FROM cards WHERE source = ? AND external_id IS NOT NULL AND deleted_at IS NULL',
+        [source],
+      );
+    },
+
+    /** Replaces masks, media link, folder, title, and imported review state for an existing card. */
+    async replaceImported(
+      cardId: string,
+      input: Omit<NewCard, 'externalId'> & { externalId: string },
+    ): Promise<{ mediaId: string; reusedMedia: boolean }> {
+      validateInput(input);
+      const now = clock.now();
+      return db.transaction(async (tx) => {
+        await liveFolder(tx, input.folderId);
+        const live = await tx.get<{ id: string; media_id: string }>(
+          'SELECT id, media_id FROM cards WHERE id = ? AND deleted_at IS NULL',
+          [cardId],
+        );
+        if (!live) throw new ValidationError('カードが見つかりません');
+        const { mediaId, reused } = await upsertMedia(tx, ctx, input.media, now);
+        await tx.run(
+          `UPDATE cards SET folder_id = ?, media_id = ?, title = ?, source = ?, external_id = ?, updated_at = ?
+           WHERE id = ? AND deleted_at IS NULL`,
+          [
+            input.folderId,
+            mediaId,
+            input.title != null ? await ctx.fields.seal(input.title) : null,
+            input.source,
+            input.externalId,
+            now,
+            cardId,
+          ],
+        );
+        await tx.run(
+          'UPDATE masks SET deleted_at = ?, updated_at = ? WHERE card_id = ? AND deleted_at IS NULL',
+          [now, now, cardId],
+        );
+        await insertMasks(tx, ctx, cardId, input.masks, input.media, now);
+        await tx.run('DELETE FROM review_states WHERE card_id = ?', [cardId]);
+        if (input.review) await insertImportedState(tx, cardId, input.review, now);
+        else await insertInitialState(tx, ctx.scheduler, cardId, now);
+        return { mediaId, reusedMedia: reused };
       });
     },
 

@@ -17,7 +17,7 @@ export function guardFoldersWhenReadOnly(repo: FolderRepo, mutate: boolean): Fol
 
 export function guardCardsWhenReadOnly(repo: CardRepo, mutate: boolean): CardRepo {
   if (mutate) return repo;
-  return { ...repo, create: deny, remove: deny, move: deny };
+  return { ...repo, create: deny, remove: deny, move: deny, replaceImported: deny };
 }
 
 export function guardReviewsWhenReadOnly(repo: ReviewRepo, mutate: boolean): ReviewRepo {

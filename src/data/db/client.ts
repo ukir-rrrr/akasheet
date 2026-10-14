@@ -28,6 +28,8 @@ import {
   guardFoldersWhenReadOnly,
   guardReviewsWhenReadOnly,
 } from '../security/readOnlyGuard';
+import { executeImportPlan, type ImportDeps } from '../importService';
+import type { ImportPlan, ParsedImportCard } from '@/import/types';
 import { runMaintenance, saveCard, type SaveCardInput } from '../services';
 import { createExpoDriver } from './expoDriver';
 import { migrate } from './migrate';
@@ -45,6 +47,11 @@ export type AppData = {
   meta: MetaRepo;
   images: Pick<MediaStore, 'prepareImage' | 'resolveMediaUri'>;
   saveCard(input: SaveCardInput): Promise<string>;
+  runImport(
+    plan: ImportPlan,
+    source: 'import:anki' | 'import:csv',
+    resolveImageUri: (card: ParsedImportCard) => Promise<string>,
+  ): Promise<{ imported: number; skipped: number }>;
   runMaintenance(): Promise<{ purged: number; removedFiles: number }>;
 };
 
@@ -135,6 +142,24 @@ export async function openAppData(): Promise<AppData> {
         );
       }
       return saveCard({ cards, store }, input);
+    },
+    runImport: (plan, source, resolveImageUri) => {
+      if (!mutate) {
+        throw new DataProtectionError(
+          'この端末ではデータ保護キーを利用できないため、取り込みを実行できません。',
+        );
+      }
+      const deps: ImportDeps = {
+        cards,
+        folders,
+        store,
+        prepareImageFromBytes: async (bytes, _mime) => {
+          const { writeImportImageBytes } = await import('../importMedia');
+          const uri = await writeImportImageBytes(bytes, 'inline.jpg', ctx.clock.now());
+          return store.prepareImage(uri);
+        },
+      };
+      return executeImportPlan(deps, plan, source, resolveImageUri);
     },
     runMaintenance: () => {
       if (!mutate) return Promise.resolve({ purged: 0, removedFiles: 0 });

@@ -37,6 +37,7 @@ export default function RootLayout() {
                   name="review/summary"
                   options={{ presentation: 'fullScreenModal', gestureEnabled: false }}
                 />
+                <Stack.Screen name="import/index" options={{ presentation: 'modal' }} />
               </Stack>
             </AppDataProvider>
           </DialogProvider>

@@ -13,6 +13,7 @@ module.exports = {
     '!src/**/*.test.ts',
     '!src/data/db/expoDriver.ts',
     '!src/data/db/client.ts',
+    '!src/data/importMedia.ts',
     '!src/data/media/**',
     'src/data/media/store.ts',
     'src/data/media/types.ts',

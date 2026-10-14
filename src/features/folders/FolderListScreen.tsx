@@ -119,6 +119,18 @@ export function FolderListScreen() {
         </Card>
 
         <PressableScale
+          testID="import-wizard"
+          accessibilityRole="button"
+          onPress={() => router.push('/import')}
+          style={[styles.addRow, { borderColor: c.lineStrong }]}
+        >
+          <Icon name="download-outline" color={c.ink2} />
+          <AppText variant="button" color={c.ink2}>
+            取り込み（Anki / CSV）
+          </AppText>
+        </PressableScale>
+
+        <PressableScale
           testID="add-folder"
           accessibilityRole="button"
           onPress={() => actions.createFolder()}
