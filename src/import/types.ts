@@ -37,6 +37,8 @@ export type ImportApplyResult = {
   created: number;
   skippedDuplicate: number;
   failed: number;
+  /** Human-readable errors for failed rows (capped). */
+  errors: string[];
 };
 
 export const IMPORTED_ALGORITHM = 'imported';
@@ -52,30 +54,77 @@ export function ankiExternalId(cardId: number | string): string {
   return String(cardId);
 }
 
-export function csvExternalId(row: number): string {
-  return `row:${row}`;
+/**
+ * Anki revlog ease: 1=Again, 2=Hard, 3=Good, 4=Easy.
+ * akasheet の Rating は 1|3 のみのため Hard(2) は Good(3) に寄せる。Easy も 3。
+ * lapse 集計はこの変換に依存せず、revlog の ease===1 を数える。
+ */
+export function ankiRatingFromEase(ease: number): Rating {
+  if (ease <= 1) return 1;
+  return 3;
 }
 
-export function ankiPhaseFromQueue(type: number, queue: number): Phase {
-  if (type === 0) return 'new';
-  if (type === 1) return queue === 1 ? 'learning' : 'learning';
-  if (type === 3) return 'relearning';
-  return 'review';
+/** Anki revlog type: 0=learn, 1=review, 2=relearn, 3=filtered, 4=manual. */
+export function ankiRevlogPhase(revlogType: number): Phase {
+  switch (revlogType) {
+    case 0:
+      return 'learning';
+    case 1:
+      return 'review';
+    case 2:
+      return 'relearning';
+    case 3:
+    case 4:
+      return 'review';
+    default:
+      return 'review';
+  }
+}
+
+/**
+ * Anki card type: 0=new, 1=learning, 2=review, 3=relearning.
+ * queue<0 は suspended / buried — 取り込み対象外 (null)。
+ */
+export function ankiCardPhase(card: { type: number; queue: number }): Phase | null {
+  if (card.queue < 0) return null;
+  switch (card.type) {
+    case 0:
+      return 'new';
+    case 1:
+      return 'learning';
+    case 2:
+      return 'review';
+    case 3:
+      return 'relearning';
+    default:
+      return 'review';
+  }
 }
 
 export function ankiEaseFactor(factor: number): number {
   return Math.max(1.3, factor / 1000);
 }
 
-export function ankiDueAt(card: { due: number; type: number }, nowMs: number): number {
-  if (card.type === 0 || card.type === 1) {
-    return nowMs + Math.max(0, card.due) * 60_000;
+/**
+ * Anki card `due` の意味は type 依存。
+ * - review (2): 収集作成日 crt（秒）からの日数 → (crt + due * 86400) 秒
+ * - learning/relearning (1/3): エポック秒（ミリ秒へ変換）
+ * - new (0): 現時刻扱い
+ */
+export function ankiDueAtMs(crtSeconds: number, card: { due: number; type: number }, nowMs: number): number {
+  switch (card.type) {
+    case 0:
+      return nowMs;
+    case 1:
+    case 3:
+      return card.due >= 1_000_000_000_000 ? card.due : card.due * 1000;
+    case 2:
+      return (crtSeconds + card.due * 86_400) * 1000;
+    default:
+      return (crtSeconds + card.due * 86_400) * 1000;
   }
-  const dayMs = 86_400_000;
-  const dayIndex = card.due;
-  return dayIndex * dayMs;
 }
 
-export function ankiRatingFromEase(ease: number): Rating {
-  return ease < 3 ? 1 : 3;
+export function ankiRevlogIsLapse(ease: number): boolean {
+  return ease === 1;
 }

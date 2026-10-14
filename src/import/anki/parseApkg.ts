@@ -2,16 +2,19 @@ import { unzipSync } from 'fflate';
 
 import type { ReviewState } from '@/domain/scheduler/types';
 
-import { parseOcclusionMasks } from '../masks';
+import { occlusionMaskForOrd } from '../masks';
 import type { ImportCardDraft, ImportPreview, ImportReviewLog } from '../types';
 import {
-  ankiDueAt,
+  ankiCardPhase,
+  ankiDueAtMs,
   ankiEaseFactor,
   ankiExternalId,
-  ankiPhaseFromQueue,
   ankiRatingFromEase,
+  ankiRevlogIsLapse,
+  ankiRevlogPhase,
   folderPathKey,
 } from '../types';
+import { readCollectionFromZip } from './collectionBytes';
 import { openAnkiDb, queryAll, queryGet } from './sqlite';
 
 const FIELD_SEP = '\u001f';
@@ -77,6 +80,7 @@ function resolveMediaFile(mediaMap: Record<string, string>, zip: Record<string, 
 }
 
 function buildReviewFromCard(
+  crtSeconds: number,
   card: {
     type: number;
     queue: number;
@@ -108,57 +112,44 @@ function buildReviewFromCard(
     const prev = state;
     const rating = ankiRatingFromEase(l.ease);
     const intervalDays = Math.max(0, l.ivl);
-    const dueAt = l.time;
-    const phase =
-      l.type === 0 ? 'learning' : l.type === 1 ? 'learning' : l.type === 3 ? 'relearning' : 'review';
+    const phase = ankiRevlogPhase(l.type);
     const next: ReviewState = {
       phase,
-      dueAt,
+      dueAt: l.time,
       intervalDays,
       ease: ankiEaseFactor(l.factor),
       reps: prev.reps + 1,
-      lapses: rating === 1 ? prev.lapses + 1 : prev.lapses,
+      lapses: prev.lapses + (ankiRevlogIsLapse(l.ease) ? 1 : 0),
       lastReviewedAt: l.time,
     };
     outLogs.push({ reviewedAt: l.time, rating, prev, next });
     state = next;
   }
 
-  if (outLogs.length === 0) {
-    state = {
-      phase: ankiPhaseFromQueue(card.type, card.queue),
-      dueAt: ankiDueAt(card, nowMs),
-      intervalDays: Math.max(0, card.ivl),
-      ease: ankiEaseFactor(card.factor),
-      reps: card.reps,
-      lapses: card.lapses,
-      lastReviewedAt: null,
-    };
-  } else {
-    state = {
-      phase: ankiPhaseFromQueue(card.type, card.queue),
-      dueAt: ankiDueAt(card, nowMs),
-      intervalDays: Math.max(0, card.ivl),
-      ease: ankiEaseFactor(card.factor),
-      reps: card.reps,
-      lapses: card.lapses,
-      lastReviewedAt: outLogs[outLogs.length - 1]?.reviewedAt ?? null,
-    };
-  }
+  const phase = ankiCardPhase(card);
+  if (!phase) return undefined;
 
-  return { state, logs: outLogs };
+  const base: ReviewState = {
+    phase,
+    dueAt: ankiDueAtMs(crtSeconds, card, nowMs),
+    intervalDays: Math.max(0, card.ivl),
+    ease: ankiEaseFactor(card.factor),
+    reps: card.reps,
+    lapses: card.lapses,
+    lastReviewedAt: outLogs[outLogs.length - 1]?.reviewedAt ?? null,
+  };
+
+  return { state: base, logs: outLogs };
 }
 
 export async function parseApkg(bytes: Uint8Array, fileName: string, nowMs: number): Promise<ImportPreview> {
   const zip = readZip(bytes);
-  const colBytes = zip['collection.anki21'] ?? zip['collection.anki2'];
-  if (!colBytes) {
-    throw new Error('Anki コレクション (collection.anki2) が見つかりません');
-  }
+  const colBytes = readCollectionFromZip(zip);
 
   const db = await openAnkiDb(colBytes);
   try {
-    const col = queryGet<{ decks: string }>(db, 'SELECT decks FROM col LIMIT 1');
+    const col = queryGet<{ decks: string; crt: number }>(db, 'SELECT decks, crt FROM col LIMIT 1');
+    const crtSeconds = col?.crt ?? 0;
     const decks = parseDecksJson(col?.decks ?? '{}');
 
     const notes = queryAll<{ id: number; flds: string }>(db, 'SELECT id, flds FROM notes');
@@ -200,11 +191,13 @@ export async function parseApkg(bytes: Uint8Array, fileName: string, nowMs: numb
     const drafts: ImportCardDraft[] = [];
 
     for (const card of cards) {
+      if (ankiCardPhase(card) === null) continue;
+
       const flds = noteById.get(card.nid);
       if (!flds) continue;
       const html = flds.join('\n');
-      const masks = parseOcclusionMasks(html);
-      if (masks.length === 0) continue;
+      const mask = occlusionMaskForOrd(html, card.ord);
+      if (!mask) continue;
 
       const imgName = firstImageName(html);
       if (!imgName) continue;
@@ -212,7 +205,7 @@ export async function parseApkg(bytes: Uint8Array, fileName: string, nowMs: numb
       if (!media) continue;
 
       const deckName = decks.get(card.did) ?? 'Imported';
-      const review = buildReviewFromCard(card, logsByCard.get(card.id) ?? [], nowMs);
+      const review = buildReviewFromCard(crtSeconds, card, logsByCard.get(card.id) ?? [], nowMs);
 
       drafts.push({
         externalId: ankiExternalId(card.id),
@@ -220,7 +213,7 @@ export async function parseApkg(bytes: Uint8Array, fileName: string, nowMs: numb
         folderPath: deckPath(deckName),
         imageBytes: media.bytes,
         imageMime: media.mime,
-        masks,
+        masks: [mask],
         review,
       });
     }

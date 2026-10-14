@@ -132,8 +132,7 @@ function shapesFromSvg(svg: string): Map<number, Shape[]> {
   return byCloze;
 }
 
-/** Image Occlusion HTML → one mask per cloze (`cN`). */
-export function parseOcclusionMasks(html: string): MaskGeometry[] {
+function occlusionMasksByCloze(html: string): Map<number, MaskGeometry> {
   const combined = new Map<number, Shape[]>();
 
   for (const svg of html.match(/<svg[\s\S]*?<\/svg>/gi) ?? []) {
@@ -152,12 +151,21 @@ export function parseOcclusionMasks(html: string): MaskGeometry[] {
     clozeNums.add(1);
   }
 
+  const out = new Map<number, MaskGeometry>();
   const indices = [...new Set([...clozeNums, ...combined.keys()])].sort((a, b) => a - b);
-  const masks: MaskGeometry[] = [];
   for (const ci of indices) {
-    const shapes = combined.get(ci) ?? [];
-    const g = geometryFromShapes(shapes);
-    if (g) masks.push(g);
+    const g = geometryFromShapes(combined.get(ci) ?? []);
+    if (g) out.set(ci, g);
   }
-  return masks;
+  return out;
+}
+
+/** Image Occlusion HTML → one mask per cloze (`cN`), sorted by cloze index. */
+export function parseOcclusionMasks(html: string): MaskGeometry[] {
+  return [...occlusionMasksByCloze(html).values()];
+}
+
+/** `ord` is Anki card.ord (0-based); maps to cloze `c(ord+1)`. */
+export function occlusionMaskForOrd(html: string, ord: number): MaskGeometry | null {
+  return occlusionMasksByCloze(html).get(ord + 1) ?? null;
 }

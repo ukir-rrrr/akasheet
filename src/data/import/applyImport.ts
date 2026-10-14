@@ -1,5 +1,5 @@
 import type { ImportApplyResult, ImportPreview } from '@/import/types';
-import { errorMessage, ValidationError } from '@/shared/errors';
+import { errorMessage } from '@/shared/errors';
 
 import type { MediaStore } from '../media/store';
 import type { CardRepo } from '../repos/cardRepo';
@@ -10,6 +10,8 @@ export type ImportDeps = {
   cards: CardRepo;
   store: MediaStore;
 };
+
+const MAX_ERRORS = 8;
 
 export async function applyImportPreview(
   deps: ImportDeps,
@@ -23,6 +25,15 @@ export async function applyImportPreview(
   let created = 0;
   let skippedDuplicate = 0;
   let failed = 0;
+  const errors: string[] = [];
+
+  const noteError = (card: ImportPreview['cards'][number], e: unknown) => {
+    failed++;
+    if (errors.length < MAX_ERRORS) {
+      const label = card.title ?? card.externalId;
+      errors.push(`${label}: ${errorMessage(e)}`);
+    }
+  };
 
   for (const card of preview.cards) {
     if (existing.has(card.externalId)) {
@@ -50,14 +61,13 @@ export async function applyImportPreview(
           skippedDuplicate++;
           existing.add(card.externalId);
         } else {
-          failed++;
+          noteError(card, e);
         }
       }
     } catch (e) {
-      if (e instanceof ValidationError) failed++;
-      else failed++;
+      noteError(card, e);
     }
   }
 
-  return { created, skippedDuplicate, failed };
+  return { created, skippedDuplicate, failed, errors };
 }

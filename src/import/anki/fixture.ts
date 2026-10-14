@@ -13,7 +13,7 @@ export function buildSampleApkg(): Uint8Array {
   db.exec(`
     CREATE TABLE col (id integer primary key, crt int, mod int, scm int, ver int, dty int, usn int, ls int,
       conf text, models text, decks text, dconf text, tags text);
-    INSERT INTO col VALUES (1,0,0,0,11,0,0,0,'{}','{}','{"1":{"id":1,"name":"親::子","usn":0,"collapsed":false,"browserCollapsed":false,"desc":0,"dyn":0,"conf":1,"extendNew":0,"extendRev":0}}','{}','{}');
+    INSERT INTO col VALUES (1,1600000000,0,0,11,0,0,0,'{}','{}','{"1":{"id":1,"name":"親::子","usn":0,"collapsed":false,"browserCollapsed":false,"desc":0,"dyn":0,"conf":1,"extendNew":0,"extendRev":0}}','{}','{}');
     CREATE TABLE notes (id integer primary key, guid text, mid int, mod int, usn int, tags text, flds text, sfld int, csum int, flags int, data text);
     CREATE TABLE cards (id integer primary key, nid int, did int, ord int, mod int, usn int, type int, queue int, due int, ivl int, factor int, reps int, lapses int, left int, odue int, odid int, flags int, data text);
     CREATE TABLE revlog (id integer primary key, cid int, usn int, ease int, ivl int, lastIvl int, factor int, time int, type int);

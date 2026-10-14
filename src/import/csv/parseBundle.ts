@@ -2,7 +2,8 @@ import { unzipSync } from 'fflate';
 
 import { parseCsvMasksColumn } from '../masks';
 import type { ImportCardDraft, ImportPreview } from '../types';
-import { csvExternalId, folderPathKey } from '../types';
+import { csvExternalId } from '../stableId';
+import { folderPathKey } from '../types';
 
 const HEADER = ['folder_name', 'image_file', 'masks', 'title'] as const;
 
@@ -105,7 +106,7 @@ export function parseCsvZip(bytes: Uint8Array, fileName: string): ImportPreview 
     if (!img) return;
 
     drafts.push({
-      externalId: csvExternalId(rowIndex + 1),
+      externalId: csvExternalId(imageFile, titleRaw && titleRaw.length > 0 ? titleRaw : null),
       title: titleRaw && titleRaw.length > 0 ? titleRaw : null,
       folderPath: folderPathFromName(folderName),
       imageBytes: img.bytes,
@@ -151,7 +152,7 @@ export function parseCsvOnly(
     const lower = imageFile.toLowerCase();
     const mime = lower.endsWith('.png') ? 'image/png' : lower.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
     drafts.push({
-      externalId: csvExternalId(rowIndex + 1),
+      externalId: csvExternalId(imageFile, titleRaw && titleRaw.length > 0 ? titleRaw : null),
       title: titleRaw && titleRaw.length > 0 ? titleRaw : null,
       folderPath: folderPathFromName(folderName),
       imageBytes: bytes,

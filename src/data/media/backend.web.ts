@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { Storage } from 'expo-sqlite/kv-store';
 
 import { encodeJpeg } from './encodeJpeg';
+import { discardImportStage, isImportStageUri, readImportStage, stageImportInMemory } from './importStage';
 import type { MediaBackend } from './store';
 import { StorageError } from '@/shared/errors';
 
@@ -24,21 +25,19 @@ function dataUriBytes(uri: string): Uint8Array<ArrayBuffer> {
   }
 }
 
-function bytesToDataUri(bytes: Uint8Array, mime: string): string {
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return `data:${mime};base64,${btoa(bin)}`;
-}
-
 export const platformBackend: MediaBackend = {
   encodeJpeg: (uri, maxSide, quality) => encodeJpeg(uri, maxSide, quality, true),
-  async stageImport(bytes, mime) {
-    return bytesToDataUri(bytes, mime);
+  async stageImport(bytes, _mime) {
+    return stageImportInMemory(bytes);
   },
-  async discardStage(_uri) {
-    // data URIs need no cleanup
+  async discardStage(uri) {
+    if (isImportStageUri(uri)) discardImportStage(uri);
   },
-  readBytes: async (uri) => dataUriBytes(uri),
+  readBytes: async (uri) => {
+    const staged = readImportStage(uri);
+    if (staged) return staged as Uint8Array<ArrayBuffer>;
+    return dataUriBytes(uri);
+  },
   sha256: async (bytes) => toHex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes)),
   assertCapacity(bytes) {
     if (bytes > 12 * 1024 * 1024) {

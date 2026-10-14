@@ -96,10 +96,24 @@ export function createFolderRepo(ctx: RepoContext) {
     },
 
     /** Creates missing segments; returns the leaf folder id. */
+    async findByName(parentId: string | null, name: string): Promise<string | null> {
+      const clean = validateFolderName(name);
+      const siblings = await db.all<{ id: string; name: string }>(
+        'SELECT id, name FROM folders WHERE deleted_at IS NULL AND parent_id IS ?',
+        [parentId],
+      );
+      for (const s of siblings) {
+        if ((await ctx.fields.open(s.name)) === clean) return s.id;
+      }
+      return null;
+    },
+
     async ensurePath(path: string[]): Promise<string> {
       const segments = path.map((s) => s.trim()).filter(Boolean);
       if (segments.length === 0) {
-        return this.create('Imported').then((f) => f.id);
+        const existing = await this.findByName(null, 'Imported');
+        if (existing) return existing;
+        return (await this.create('Imported')).id;
       }
       let parentId: string | null = null;
       let leafId = '';

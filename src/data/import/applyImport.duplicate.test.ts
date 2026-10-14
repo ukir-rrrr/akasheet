@@ -51,5 +51,6 @@ describe('applyImportPreview duplicate race', () => {
     );
     expect(result.skippedDuplicate).toBe(1);
     expect(result.created).toBe(0);
+    expect(result.errors).toEqual([]);
   });
 });

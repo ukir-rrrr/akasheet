@@ -1,5 +1,7 @@
 import { zipSync } from 'fflate';
 
+import { csvExternalId } from '../stableId';
+
 import { parseCsvZip } from './parseBundle';
 
 describe('parseCsvZip', () => {
@@ -16,6 +18,7 @@ describe('parseCsvZip', () => {
     expect(preview.cards).toHaveLength(1);
     expect(preview.cards[0].folderPath).toEqual(['生物', '細胞']);
     expect(preview.cards[0].title).toBe('核');
+    expect(preview.cards[0].externalId).toBe(csvExternalId('img1.jpg', '核'));
     expect(preview.folders[0].cardCount).toBe(1);
   });
 });

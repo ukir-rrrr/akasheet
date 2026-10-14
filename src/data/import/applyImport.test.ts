@@ -101,6 +101,20 @@ describe('applyImportPreview', () => {
     const second = await applyImportPreview({ folders, cards, store }, preview);
     expect(second.skippedDuplicate).toBe(1);
 
+    const badPreview = {
+      ...preview,
+      cards: [
+        {
+          ...preview.cards[0],
+          externalId: 'bad-mask',
+          masks: [{ v: 1 as const, shapes: [{ t: 'rect' as const, x: 0, y: 0, w: 0, h: 0 }] }],
+        },
+      ],
+    };
+    const failResult = await applyImportPreview({ folders, cards, store }, badPreview);
+    expect(failResult.failed).toBe(1);
+    expect(failResult.errors.length).toBeGreaterThan(0);
+
     const child = await db.get<{ parent_id: string | null }>(
       'SELECT parent_id FROM folders WHERE deleted_at IS NULL AND parent_id IS NOT NULL',
     );

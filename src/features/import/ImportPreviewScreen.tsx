@@ -28,6 +28,7 @@ export function ImportPreviewScreen({ preview }: Props) {
   const { afterImport } = useQueryInvalidation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resultSummary, setResultSummary] = useState<string | null>(null);
 
   const stats = useMemo(() => {
     return summarizePreview(preview, new Set());
@@ -51,12 +52,21 @@ export function ImportPreviewScreen({ preview }: Props) {
   const onConfirm = async () => {
     setBusy(true);
     setError(null);
+    setResultSummary(null);
     try {
       const result = await app.applyImport(preview);
       await afterImport();
-      pendingImportPreview.take();
-      goBackOr('/');
-      return result;
+      const summary = `取り込み: ${result.created}枚・重複スキップ ${result.skippedDuplicate}枚${
+        result.failed > 0 ? `・失敗 ${result.failed}枚` : ''
+      }`;
+      setResultSummary(summary);
+      if (result.failed > 0 && result.errors.length > 0) {
+        setError(result.errors.join('\n'));
+      }
+      if (result.failed === 0 && (result.created > 0 || result.skippedDuplicate > 0)) {
+        pendingImportPreview.take();
+        goBackOr('/');
+      }
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -109,6 +119,11 @@ export function ImportPreviewScreen({ preview }: Props) {
           ))}
         </Card>
 
+        {resultSummary && (
+          <AppText variant="sub" color={c.ink2} style={{ marginTop: space[12] }}>
+            {resultSummary}
+          </AppText>
+        )}
         {error && (
           <AppText variant="sub" color={c.warn} style={{ marginTop: space[12] }}>
             {error}

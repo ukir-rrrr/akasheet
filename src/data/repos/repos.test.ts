@@ -71,7 +71,7 @@ async function setup() {
 describe('migrations', () => {
   it('migrates an empty DB and is a no-op the second time', async () => {
     const db = createBetterSqliteDriver();
-    expect(await migrate(db)).toEqual([1]);
+    expect(await migrate(db)).toEqual([1, 2]);
     expect(await userVersion(db)).toBe(LATEST_VERSION);
     expect(await migrate(db)).toEqual([]);
   });
@@ -82,13 +82,13 @@ describe('migrations', () => {
     const backups: number[] = [];
     const next = [
       ...MIGRATIONS,
-      { version: 2, name: 'test', sql: 'ALTER TABLE folders ADD COLUMN icon TEXT;' },
+      { version: 3, name: 'test', sql: 'ALTER TABLE folders ADD COLUMN icon TEXT;' },
     ];
     expect(await migrate(db, { migrations: next, beforeMigrate: async (v) => void backups.push(v) })).toEqual(
-      [2],
+      [3],
     );
-    expect(backups).toEqual([1]);
-    expect(await userVersion(db)).toBe(2);
+    expect(backups).toEqual([2]);
+    expect(await userVersion(db)).toBe(3);
     expect((await folders.list(0)).map((f) => f.name)).toEqual(['日本史']);
   });
 
@@ -96,10 +96,10 @@ describe('migrations', () => {
     const { db } = await setup();
     const bad = [
       ...MIGRATIONS,
-      { version: 2, name: 'bad', sql: 'CREATE TABLE x (a INT); SELECT * FROM nope;' },
+      { version: 3, name: 'bad', sql: 'CREATE TABLE x (a INT); SELECT * FROM nope;' },
     ];
     await expect(migrate(db, { migrations: bad })).rejects.toThrow();
-    expect(await userVersion(db)).toBe(1);
+    expect(await userVersion(db)).toBe(2);
     expect(await db.get("SELECT name FROM sqlite_master WHERE name = 'x'")).toBeNull();
   });
 
@@ -511,6 +511,13 @@ describe('reviewRepo', () => {
     expect(await reviews.replay(cardId)).toEqual(await reviews.state(cardId));
     await expect(reviews.replay('missing')).rejects.toBeInstanceOf(ValidationError);
     await expect(reviews.state('missing')).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('ensurePath reuses a single Imported folder for empty path', async () => {
+    const { folders } = await setup();
+    const a = await folders.ensurePath([]);
+    const b = await folders.ensurePath([]);
+    expect(a).toBe(b);
   });
 
   it('ensurePath creates nested folders and external_id dedupes imports', async () => {

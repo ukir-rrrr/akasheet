@@ -1,17 +1,46 @@
 import initSqlJs, { type Database } from 'sql.js';
 
 let sqlPromise: ReturnType<typeof initSqlJs> | null = null;
+let wasmLocalUri: string | null | undefined;
+
+async function resolveWasmUri(): Promise<string> {
+  if (wasmLocalUri !== undefined) {
+    if (wasmLocalUri) return wasmLocalUri;
+    return require.resolve('sql.js/dist/sql-wasm.wasm');
+  }
+
+  if (typeof process !== 'undefined' && process.env.JEST_WORKER_ID) {
+    wasmLocalUri = null;
+    return require.resolve('sql.js/dist/sql-wasm.wasm');
+  }
+
+  const { Platform } = await import('react-native');
+  if (Platform.OS === 'web') {
+    wasmLocalUri = require.resolve('sql.js/dist/sql-wasm.wasm');
+    return wasmLocalUri;
+  }
+
+  try {
+    const { Asset } = await import('expo-asset');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const sqlWasmAsset = require('../../../assets/sql/sql-wasm.wasm');
+    const asset = Asset.fromModule(sqlWasmAsset);
+    await asset.downloadAsync();
+    wasmLocalUri = asset.localUri;
+  } catch {
+    wasmLocalUri = null;
+  }
+  if (wasmLocalUri) return wasmLocalUri;
+  return require.resolve('sql.js/dist/sql-wasm.wasm');
+}
 
 async function getSql() {
   if (!sqlPromise) {
+    const wasmUri = await resolveWasmUri();
     sqlPromise = initSqlJs({
       locateFile: (file: string) => {
-        try {
-          // Jest / Node
-          return require.resolve(`sql.js/dist/${file}`);
-        } catch {
-          return `https://sql.js.org/dist/${file}`;
-        }
+        if (file.endsWith('.wasm')) return wasmUri;
+        return require.resolve(`sql.js/dist/${file}`);
       },
     });
   }

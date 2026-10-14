@@ -2,6 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Platform } from 'react-native';
 
 import type { ImportPick } from '@/import/detect';
+import { ValidationError } from '@/shared/errors';
 
 function ext(name: string): string {
   const i = name.lastIndexOf('.');
@@ -42,5 +43,7 @@ export async function pickImportFile(): Promise<ImportPick | null> {
     const text = new TextDecoder().decode(bytes);
     return { kind: 'csv', name, text };
   }
-  return null;
+  throw new ValidationError(
+    `この形式は取り込めません（.${e || '不明'}）。.apkg / .csv / .zip を選んでください`,
+  );
 }

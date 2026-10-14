@@ -90,6 +90,15 @@ CREATE TABLE review_logs (
 CREATE INDEX idx_logs_card ON review_logs(card_id, reviewed_at);
 `,
   },
+  {
+    version: 2,
+    name: '0002_cards_external_live_only',
+    sql: `
+DROP INDEX IF EXISTS idx_cards_external;
+CREATE UNIQUE INDEX idx_cards_external ON cards(source, external_id)
+  WHERE external_id IS NOT NULL AND deleted_at IS NULL;
+`,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

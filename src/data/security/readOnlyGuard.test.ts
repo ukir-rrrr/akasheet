@@ -9,6 +9,7 @@ describe('readOnlyGuard', () => {
       get: async () => null,
       create: async () => ({ id: 'x', name: 'n', color: 'ai' as const }),
       ensurePath: async () => 'x',
+      findByName: async () => null,
       rename: async () => undefined,
       remove: async () => undefined,
     };
@@ -21,6 +22,7 @@ describe('readOnlyGuard', () => {
       get: async () => null,
       create: async () => ({ id: 'x', name: 'n', color: 'ai' as const }),
       ensurePath: async () => 'x',
+      findByName: async () => null,
       rename: async () => undefined,
       remove: async () => undefined,
     };
