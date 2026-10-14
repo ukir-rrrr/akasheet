@@ -22,7 +22,7 @@ akasheet は端末内 SQLite とローカル画像で完結している。本ド
 - **行の更新時刻**: `updated_at`（LWW の主キー）。
 - **カード**: `created_device_id`、`source` + `external_id`（取り込み系は live 行のみ一意、`idx_cards_external`）。
 - **画像**: `media.sha256` 一意、パスは端末ローカル。実体は内容アドレス（ハッシュ）で突き合わせ。
-- **復習履歴**: `review_logs` は **新規行の挿入が主**（`device_id`、`time_zone`）。既存行は **`undone_at` のみ** null → 時刻 の一方向更新（undo）が許される。`review_states` はキャッシュ。
+- **復習履歴**: `review_logs` は **新規行の挿入が主**（`device_id`、`time_zone`）。既存行は **`undone_at` のみ** null → 時刻 の一方向更新（undo）が許される。`review_states` は live 復習後のキャッシュ。Anki/CSV 取り込み時の **不変の基準 state** は `review_import_baselines`（§2.3・§3.6）に一度だけ記録し、live 復習では更新しない。
 - **暗号化（PR #9 相当）**: DEK は Secure Store。DB の機微フィールド（マスク geometry 等）と画像は DEK で暗号化。読み取り専用モード時はマージ不可。
 
 ---
@@ -45,7 +45,7 @@ bundle.akasheet (zip)
 │   ├── masks.jsonl
 │   ├── media.jsonl        # メタのみ（path はエクスポート側の参照用、取り込みは sha256 で突合）
 │   ├── review_logs.jsonl
-│   ├── review_states.jsonl  # import スナップショットのみ（§2.3）。live 由来は載せない
+│   ├── review_import_baselines.jsonl  # 取り込み時基準 state（全件・§2.3）。live 復習済みカードも含む
 │   └── tombstones.jsonl   # 任意: 物理削除予定のメタ（GC 用、後述）
 └── media/
     └── <sha256>.bin       # 欠けている画像・サムネの平文 JPEG バイト（復号後）
@@ -82,7 +82,7 @@ bundle.akasheet (zip)
 }
 ```
 
-**第1段階（full のみ）**: 論理削除行も含め、マージに必要な全行＋参照される全 `review_logs`＋ **`algorithm = IMPORTED_ALGORITHM` の `review_states` 行のみ**（Anki/CSV 取り込みカードのマージ replay 起点。§2.3）＋ live カードが参照する全 `media` ハッシュのファイルを同梱する。live スケジューラで再計算できる `review_states` は載せない。`manifest.mode` は常に `"full"`。
+**第1段階（full のみ）**: 論理削除行も含め、マージに必要な全行＋参照される全 `review_logs`＋ **`review_import_baselines` の全行**（取り込みカードのマージ replay 起点。live 復習後も行は残る。§2.3）＋ live カードが参照する全 `media` ハッシュのファイルを同梱する。`review_states` はバンドルに載せない（live 由来はログから再生）。`manifest.mode` は常に `"full"`。
 
 **第2段階以降（未実装）**: `mode: "delta"` とローカル `sync_state.export_cursor`（端末ローカルの単調増加 **`change_seq`** — 取り込み適用を含む **ローカル DB への書き込みごとに +1**）により、`change_seq` がカーソルより大きい行だけ JSONL に載せる差分書き出しを検討する。`review_logs` は `(reviewed_at, id)` の副カーソルで補助。`updated_at` だけを境界にしない（他端末取り込み行は元の `updated_at` を保持するため、再送漏れや端末時計ずれで欠落する）。`included_log_ids` 等の重複検知フィールドも delta 向け。
 
@@ -92,7 +92,7 @@ DB 行を JSON オブジェクト1行に直列化する。機微フィールド�
 
 `review_logs` は DB 列をそのまま export（`device_id` / `time_zone` 含む）。
 
-`review_states.jsonl` は **`algorithm = IMPORTED_ALGORITHM` の行だけ** export（`card_id` ごとに最大1行）。live 復習で得られる state は `review_logs` からマージ側で再生する。
+`review_import_baselines.jsonl` は DB の `review_import_baselines` を **全件** export（`card_id` ごとに最大1行。取り込み未実施カードは行なし）。列は §3.6 に合わせる（`algorithm` は取り込み時点の `IMPORTED_ALGORITHM` を記録するが、マージ replay の起点値は state 成分のみ使用）。
 
 ### 画像の同梱
 
@@ -150,30 +150,43 @@ DB 行を JSON オブジェクト1行に直列化する。機微フィールド�
   3. 上記以外の列の不一致は想定しない（同一 ID は同一復習イベント）。
 - マージ後の replay は **`undone_at IS NULL` のログのみ**適用（§2.3）。undo された行はスキップされ、カード state は当該ログの効果を持たない。
 
-### 2.3 `review_states` の再生
+### 2.3 `review_states` の再生（マージ）
 
-マージでは **`review_states` 行を LWW しない**（ログと競合するため）。
+マージでは **`review_states` 行を LWW しない**（ログと競合するため）。取り込み時の基準 state は **`review_import_baselines`** に固定し、live 復習で `review_states` が live 算法に切り替わっても、マージ replay の import 起点は baseline のみから取る（§2.6 冪等性）。
 
-現行 `reviewRepo.replay`（`src/data/repos/reviewRepo.ts`）は `algorithm` を見ず、**全ログ**を live スケジューラで `scheduler.initial(created_at)` から順再生する。一方 Anki/CSV 取り込みは `insertImportedReview` が **`review_states` を `IMPORTED_ALGORITHM` で直接書き**、ログも `algorithm=imported` で入れる。この差をマージ再生で吸収する規則:
+現行 `reviewRepo.replay`（`src/data/repos/reviewRepo.ts`）は `algorithm` を見ず、**全ログ**を live スケジューラで `scheduler.initial(created_at)` から順再生する。Anki/CSV 取り込みは `parseApkg` 等が **カード行由来の最終 state**（`dueAt` / `reps` / `lapses` 等。revlog 最終行の `new_*` と一致しない場合がある — `src/import/anki/parseApkg.ts`）を `insertImportedReview` に渡し、state 行と `algorithm=imported` ログを書く。import ログを live スケジューラで逐次適用したり、最終ログの `new_*` だけを起点にしたりすると取り込み state とずれるため、**起点は baseline 専用テーブルのみ**とする。
+
+#### 2.3.1 `review_import_baselines` のマージ（和集合）
+
+バンドル `rows/review_import_baselines.jsonl` とマージ前ローカル DB の行を **`card_id` キーで和集合**する。
+
+- 片方のみに存在 → その行を採用。
+- 両方に同一 `card_id` があり **全列が一致** → スキップ。
+- 同一 `card_id` で state 成分または `imported_at` が異なる → **`imported_at` が大きい行を採用**。同点のときは state 成分を `phase,due_at,interval_days,ease,reps,lapses,last_reviewed_at` の順でタプル化し、**辞書順で大きい方**（決定的・可換）。
+
+baseline は取り込み時に一度だけ書き、live 復習では更新しない（端末ローカルでも不変）。
+
+#### 2.3.2 カードごとの replay
 
 1. `review_logs` の和集合をカードごとにマージ（§2.2）。
-2. 各 `card_id` で純関数 `replayReviewStateForMerge(...)` を実行:
-   - **import 由来カード**（マージ後ログ集合に `algorithm = IMPORTED_ALGORITHM` が1件以上ある、またはマージ前ローカル／バンドルに import 用 `review_states` がある）の **起点 state** は、次の **上から最初に満たす** ソースから取る（端末が Anki 取り込みを一度もしていなくても、バンドルだけで決まる）:
-     1. バンドル `rows/review_states.jsonl` の当該 `card_id` 行（`algorithm = IMPORTED_ALGORITHM`）
-     2. マージ前ローカル DB の `review_states` 当該行（`algorithm = IMPORTED_ALGORITHM`）
-     3. マージ後ログ集合のうち `algorithm = IMPORTED_ALGORITHM` かつ `undone_at IS NULL` を `reviewed_at`, `id` 昇順に並べ、**最終行の `new_*` 列**から `ReviewState` を組み立てる（`insertImportedReview` の最終 `review_states` と同値になる決定的規則。live スケジューラへの逐次適用はしない）
-     4. いずれも無い → マージプレビューで **エラー**（import 復習データが不完整）
-   - **live ログのみ再生**: 起点のあと、`algorithm ≠ IMPORTED_ALGORITHM` かつ `undone_at IS NULL` のログを `reviewed_at`, `id` 昇順で live スケジューラに適用（各ログの `time_zone` と `reviewRng(cardId, reviewed_at)`）。`IMPORTED_ALGORITHM` のログは **ここでは適用しない**（起点は上記スナップショット／`new_*` 復元のみ。二重適用防止）。
-   - import 由来のないカードは従来どおり `scheduler.initial(card.created_at)` から全 live ログを再生。
-3. 得られた状態で `review_states` を **UPSERT**（`algorithm` は live スケジューラ ID。import のみのカードは `IMPORTED_ALGORITHM` を維持）。
+2. マージ後の baseline 辞書とログを入力に、各 `card_id` で純関数 `replayReviewStateForMerge(...)` を実行:
+   - **import 由来カード**（マージ後 baseline に当該 `card_id` がある、またはマージ後ログに `algorithm = IMPORTED_ALGORITHM` が1件以上ある）:
+     - **起点 state** はマージ後 baseline の当該行の state 成分のみ（`review_states`・import ログの `new_*`・ローカル `IMPORTED_ALGORITHM` 行からの復元は **しない**）。
+     - baseline に無いが import ログがある → マージプレビューで **エラー**（不完整。移行漏れや古いバンドル）。
+     - 起点のあと、`algorithm ≠ IMPORTED_ALGORITHM` かつ `undone_at IS NULL` のログのみ `reviewed_at`, `id` 昇順で live スケジューラに適用（各ログの `time_zone` と `reviewRng(cardId, reviewed_at)`）。`IMPORTED_ALGORITHM` ログは replay に **含めない**（二重適用防止）。
+   - **import 由来のないカード**は `scheduler.initial(card.created_at)` から、上記と同様に live ログのみ再生。
+3. 得られた状態で `review_states` を **UPSERT**（`algorithm` は live スケジューラ ID。import ログのみで live 未復習のカードは `IMPORTED_ALGORITHM` を維持）。
 
-**PR-A（マージコア）での実装・テスト**:
+**PR-A（マージコア＋ baseline スキーマ）での実装・テスト**:
 
+- migration v3: テーブル `review_import_baselines`（§3.6）と既存データ移行（§3.6）。
+- `insertImportedReview`（および CSV 取り込み経路）で `review_states` と **同内容**を `review_import_baselines` に **初回のみ** INSERT（`imported_at =` 取り込みトランザクションの `now`）。
 - `src/sync/merge/replay.ts`（および `reviewRepo.replay` 共通化）に上記分岐を実装。現行の「全ログを initial から再生」は **マージ経路では使わない**。
-- Jest: Anki 取り込み済みカード（`IMPORTED_ALGORITHM` + imported ログ）に、片方端末だけ live 復習ログを足してマージ → **取り込み由来の state 成分が live ログ未追加時と一致**し、live 分だけが上乗せされること。マージ前後で import のみのカードの `review_states` が不変であること。
-- Jest: **Anki 取り込み未実施の端末**が、取り込み済み端末の full バンドルだけを受け取る → `review_states.jsonl` または import ログ最終行 `new_*` から起点が決まり、replay が未定義にならないこと。
+- Jest: Anki 取り込み済みカードに **live 復習を1回** → 同一端末で `export`→`merge`（自己 merge）→ **`review_states` の due / reps / lapses が merge 前と一致**し、**`review_import_baselines` 行が不変**であること（§2.6 冪等）。
+- Jest: 片方端末だけ live 復習ログを足してマージ → baseline 起点＋live ログ合成が決定的であること。
+- Jest: **Anki 取り込み未実施の端末**が full バンドルだけを受け取る → `review_import_baselines.jsonl` から起点が決まり replay が未定義にならないこと。
 
-live 由来の `review_states` はバンドルに載せない（ログが真実の源）。import 由来だけ §1 の `review_states.jsonl` でスナップショットを同梱する。
+`review_states` はバンドルに載せない。import 起点は **`review_import_baselines.jsonl` の全件同梱**のみで端末間共有する。
 
 ### 2.4 衝突例
 
@@ -201,7 +214,7 @@ live 由来の `review_states` はバンドルに載せない（ログが真実�
 
 任意の端末ローカル状態 `A`, `B` とバンドル経由のマージ `⊕` について:
 
-- **冪等**: `A ⊕ export(A) = A`（同一内容の full バンドルの再取り込みは no-op）
+- **冪等**: `A ⊕ export(A) = A`（同一内容の full バンドルの再取り込みは no-op）。取り込みカードは `review_import_baselines` がバンドルに常に含まれるため、live 復習後に `review_states` がバンドルに載らなくても import 起点は自己 merge で変わらない（§2.3）。
 - **可換**: `A ⊕ B` と `B ⊕ A` は往復後に一致（ログ和集合＋決定的 LWW）
 - **結合**: 3台チェーンでも最終的に同じ集合（実機はペアwise 同期で十分）
 
@@ -246,9 +259,41 @@ LWW 同点は **`id` の辞書順のみ**（§2.1）。`updated_device_id` 列�
 
 ### 3.4 マイグレーション手順
 
-1. `MIGRATIONS` に v3: `sync_state` テーブル作成のみ。
-2. 初回起動で `import_peers` を `{}`、`last_full_export_at` を未設定（null 相当）で初期化。
-3. 既存ユーザーの DB はそのまま。同期機能はオプトイン UI（**iOS/Android・Expo Go**。Web 本番 UI には出さない — §5.5）。
+1. **PR-A**: `MIGRATIONS` に v3: `review_import_baselines` 作成（§3.6）＋既存データ移行。
+2. **PR-B**: v4: `sync_state` テーブル作成のみ。
+3. 初回起動（v4 適用後）で `import_peers` を `{}`、`last_full_export_at` を未設定（null 相当）で初期化。
+4. 既存ユーザーの DB は v3 で baseline を埋める。同期機能はオプトイン UI（**iOS/Android・Expo Go**。Web 本番 UI には出さない — §5.5）。
+
+### 3.6 新テーブル `review_import_baselines`（取り込み時の不変基準 state）
+
+Anki/CSV 取り込み直後のスケジューラ state（`insertImportedReview` が `review_states` に書くのと同じ成分）を、live 復習で上書きされない形で保持する。マージ replay の import 起点はここだけを参照する（§2.3）。
+
+```sql
+CREATE TABLE review_import_baselines (
+  card_id TEXT PRIMARY KEY REFERENCES cards(id),
+  algorithm TEXT NOT NULL,
+  phase TEXT NOT NULL CHECK (phase IN ('new','learning','review','relearning')),
+  due_at INTEGER NOT NULL,
+  interval_days INTEGER NOT NULL DEFAULT 0 CHECK (interval_days >= 0),
+  ease REAL NOT NULL DEFAULT 2.5 CHECK (ease >= 1.3),
+  reps INTEGER NOT NULL DEFAULT 0,
+  lapses INTEGER NOT NULL DEFAULT 0,
+  last_reviewed_at INTEGER,
+  imported_at INTEGER NOT NULL
+);
+```
+
+- **書き込み**: 取り込みトランザクションで `insertImportedReview` と同時に **1回だけ** INSERT。以降の live 復習・undo・マージ適用では **UPDATE しない**（敗者カードの論理削除時は FK に従い行が残るか CASCADE は実装で決定し、マージでは `cards` 生存行の baseline だけ参照）。
+- **エクスポート**: 上記テーブル全行 → `rows/review_import_baselines.jsonl`（live 復習済みの取り込みカードも含む）。
+
+**既存データ移行（v3 適用時）**:
+
+| 条件                                                                                           | 処理                                                                                                                                                                                                                      |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `review_logs` に当該 `card_id` の live 算法ログ（`algorithm ≠ IMPORTED_ALGORITHM`）が **無い** | 現行 `review_states` 行を baseline としてコピー。`imported_at` は当該カードの `cards.updated_at`（取り込み由来と推定できる場合）または `review_states.updated_at`                                                         |
+| live 算法ログが **ある**                                                                       | **ベストエフォート**: 現行 `review_states` を baseline にコピーするが、本来は取り込み直後の値ではない可能性がある。同期マージで import 起点がずれるリスクを README/リリースノートで一度だけ明記。新規取り込み分は常に正確 |
+
+移行後、新規の Anki/CSV 取り込みは必ず正しい baseline が入る。
 
 ### 3.5 物理削除（GC）条件の変更
 
@@ -348,14 +393,14 @@ src/sync/
 
 ### 6.1 ユニット（Jest）
 
-| 対象                 | 内容                                                                                                      |
-| -------------------- | --------------------------------------------------------------------------------------------------------- |
-| `merge/lww.ts`       | 同点 `updated_at`、削除 vs 更新、復活                                                                     |
-| `merge/mergeLogs.ts` | ID 重複、`undone_at` 結合（§2.2）、`device_id` 保持                                                       |
-| `merge/replay.ts`    | 既存 `sm2b` ゴールデンと整合、§2.3 の import スナップショット＋live のみ再生、取り込みカードの state 不変 |
-| `mergeAll`           | 冪等・可換・往復（fixture JSON を2台分合成）                                                              |
-| `parseBundle`        | 壊れた zip、必須フィールド欠落、`sha256` 不一致                                                           |
-| `cursor.ts`          | カーソル比較（第2段階 delta 用。第1段階は peer 再取り込み警告の単体テストのみでも可）                     |
+| 対象                 | 内容                                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------- |
+| `merge/lww.ts`       | 同点 `updated_at`、削除 vs 更新、復活                                                                   |
+| `merge/mergeLogs.ts` | ID 重複、`undone_at` 結合（§2.2）、`device_id` 保持                                                     |
+| `merge/replay.ts`    | 既存 `sm2b` ゴールデンと整合、§2.3 baseline マージ＋live のみ再生、取り込み後 live 1回の自己 merge 冪等 |
+| `mergeAll`           | 冪等・可換・往復（fixture JSON を2台分合成）                                                            |
+| `parseBundle`        | 壊れた zip、必須フィールド欠落、`sha256` 不一致                                                         |
+| `cursor.ts`          | カーソル比較（第2段階 delta 用。第1段階は peer 再取り込み警告の単体テストのみでも可）                   |
 
 `better-sqlite` ドライバ（`src/data/db/testing`）で2端末シナリオ:
 
@@ -387,11 +432,11 @@ Expo Go では共有シート自動化が難しいため、**開発用バンド�
 
 ## 7. 実装 PR の分割と完了条件
 
-| 順序                  | PR 内容                                                                                                                                                                   | 完了条件                                                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| **PR-A** マージコア   | `src/sync/merge/*`, §2.3 の `replayReviewStateForMerge`（import スナップショット＋live ログ）, `reviewRepo.replay` 共通化, Jest（2台 fixture・取り込みカード state 不変） | `npm run verify`、カバレッジ維持、DB スキーマ変更なし                                              |
-| **PR-B** バンドル I/O | `exportBundle` / `parseBundle`, migration v3 `sync_state`, repo スナップショット読み取り                                                                                  | ラウンドトリップテスト（export→merge→DB 一致）、実ファイルはテスト fixture のみ（小さい JPEG）     |
-| **PR-C** UI + 適用    | フォルダ一覧メニュー（モバイルのみ）、プレビュー、50 MB 警告、`applyMergePlan`, GC 更新                                                                                   | Playwright 1 本（fixture 注入）、手動: iOS Expo Go で書き出し→別端末取り込み、読み取り専用時は拒否 |
+| 順序                  | PR 内容                                                                                                                                                                                                                                                     | 完了条件                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **PR-A** マージコア   | `src/sync/merge/*`, migration v3 `review_import_baselines`（§3.6）, `insertImportedReview` で baseline 書き込み, §2.3 `replayReviewStateForMerge`, `reviewRepo.replay` 共通化, Jest（2台 fixture・live 1回後自己 merge 冪等・未取り込み端末がバンドル受信） | `npm run verify`、カバレッジ維持                                                                   |
+| **PR-B** バンドル I/O | `exportBundle` / `parseBundle`（`review_import_baselines.jsonl` 同梱）, migration v4 `sync_state`, repo スナップショット読み取り                                                                                                                            | ラウンドトリップテスト（export→merge→DB 一致）、実ファイルはテスト fixture のみ（小さい JPEG）     |
+| **PR-C** UI + 適用    | フォルダ一覧メニュー（モバイルのみ）、プレビュー、50 MB 警告、`applyMergePlan`, GC 更新                                                                                                                                                                     | Playwright 1 本（fixture 注入）、手動: iOS Expo Go で書き出し→別端末取り込み、読み取り専用時は拒否 |
 
 各 PR は独立にマージ可能だが、**ユーザー価値は PR-C** で出る。PR-A は品質の核なので先に入れる。
 
@@ -405,7 +450,7 @@ Expo Go では共有シート自動化が難しいため、**開発用バンド�
 - **ペアリング UX**: QR・短いコード・端末鍵などは **第2段階で別途設計**（本設計 PR では方式を固定しない）。
 - **`server_version`**: 行ごとに単調増加。クライアント LWW は「サーバー版優先 → updated_at → `id` 辞書順」。
 - **`sync_state`**: `import_peers` をサーバー上の `device_id` レジストリと同期。
-- **画像**: 初回はハッシュで参照。未所持バイナリだけ GET `/media/<sha256>`。バイナリ本体はサーバー側の **オブジェクトストア** に置く。**ユーザーが自前の S3 互換オブジェクトストレージを用意・運用する前提**（持ち込みストレージ）でない場合、運用者がストレージ代を常時負担するマネージドホスティング案は採用しない（§「運用コストゼロ」）。
+- **画像**: 初回はハッシュで参照。未所持バイナリだけ GET `/media/<sha256>`。バイナリ本体はサーバー側の **オブジェクトストア** に置く。**ユーザーが自前の S3 互換オブジェクトストレージを用意・運用する前提**（持ち込みストレージ）でない場合、運用者がストレージ代を常時負担するマネージドホスティング案は採用しない（§「制約（プロダクト）」表の「運用コストゼロ」行）。
 
 ### 8.2 採用しなかった案
 
