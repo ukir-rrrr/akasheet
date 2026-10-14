@@ -63,7 +63,9 @@ async function backupDatabase(path: string, fromVersion: number) {
 export async function openAppData(): Promise<AppData> {
   const raw = await openDatabaseAsync(DB_NAME);
   const pragmas = ['PRAGMA foreign_keys = ON', 'PRAGMA busy_timeout = 5000'];
-  if (Platform.OS !== 'web') pragmas.unshift('PRAGMA journal_mode = WAL');
+  if (Platform.OS !== 'web') {
+    pragmas.unshift('PRAGMA journal_mode = WAL', 'PRAGMA secure_delete = ON');
+  }
   for (const p of pragmas) await raw.execAsync(p);
   const db = createExpoDriver(raw);
   await migrate(db, { beforeMigrate: (v) => backupDatabase(raw.databasePath, v) });

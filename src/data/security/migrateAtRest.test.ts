@@ -147,7 +147,7 @@ describe('migrateAtRest', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('retries finalize when VACUUM fails without clearing sealed rows', async () => {
+  it('retries finalize when compactFreelist fails without clearing sealed rows', async () => {
     const key = await importAesKey(createHash('sha256').update('dek-vac').digest());
     const fields = createFieldProtector(key);
     const inner = createBetterSqliteDriver();
@@ -158,15 +158,13 @@ describe('migrateAtRest', () => {
       ['f-vac', 'retry-me', 'ai'],
     );
 
-    let vacuumAttempts = 0;
+    let compactAttempts = 0;
     const db: SqlDriver = {
       ...inner,
-      async exec(sql) {
-        if (/^\s*VACUUM\s*$/i.test(sql.trim())) {
-          vacuumAttempts++;
-          if (vacuumAttempts === 1) throw new Error('vacuum blocked');
-        }
-        return inner.exec(sql);
+      async compactFreelist() {
+        compactAttempts++;
+        if (compactAttempts === 1) return false;
+        return inner.compactFreelist();
       },
     };
 
@@ -194,7 +192,49 @@ describe('migrateAtRest', () => {
       platformOs: 'web',
     });
     expect(second.completed).toBe(true);
-    expect(vacuumAttempts).toBeGreaterThanOrEqual(2);
+    expect(compactAttempts).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does not leave mask shape JSON plaintext in the main db file after sealing', async () => {
+    const plainGeometry =
+      '{"v":1,"shapes":[{"t":"rect","x":0.11,"y":0.22,"w":0.33,"h":0.44,"PLAIN_MASK_FREELIST_MARKER":true}]}';
+    const marker = Buffer.from('"PLAIN_MASK_FREELIST_MARKER":true', 'utf8');
+    const key = await importAesKey(createHash('sha256').update('dek-db-bytes').digest());
+    const fields = createFieldProtector(key);
+    const dir = mkdtempSync(join(tmpdir(), 'akasheet-migrate-db-'));
+    const file = join(dir, 'akasheet.db');
+    const db = createBetterSqliteDriver(file);
+    await db.exec('PRAGMA journal_mode = WAL');
+    await migrate(db);
+    const meta = createMetaRepo(db);
+    await db.run(
+      'INSERT INTO folders (id, name, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, 1, 1, 1)',
+      ['f-mask', 'folder', 'ai'],
+    );
+    await db.run(
+      `INSERT INTO media (id, path, thumb_path, sha256, mime, width, height, byte_size, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'image/jpeg', 1, 1, 1, 1, 1)`,
+      ['m1', 'media/aa/bb.jpg', 'thumbs/aa/bb.jpg', 'a'.repeat(64)],
+    );
+    await db.run(
+      `INSERT INTO cards (id, folder_id, media_id, title, source, created_device_id, created_at, updated_at)
+       VALUES (?, ?, ?, NULL, 'library', 'dev', 1, 1)`,
+      ['c1', 'f-mask', 'm1'],
+    );
+    await db.run(
+      `INSERT INTO masks (id, card_id, ord, geometry, bbox_x, bbox_y, bbox_w, bbox_h, created_at, updated_at)
+       VALUES (?, ?, 0, ?, 0, 0, 1, 1, 1, 1)`,
+      ['mk1', 'c1', plainGeometry],
+    );
+
+    const { backend } = memoryBackend();
+    const res = await migrateAtRest({ db, meta, mediaBackend: backend, dek: key, fields, platformOs: 'ios' });
+    expect(res.completed).toBe(true);
+    db.close();
+
+    const mainBytes = readFileSync(file);
+    expect(mainBytes.includes(marker)).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
   });
 
   it('does not mark migration complete when media encryption fails', async () => {
