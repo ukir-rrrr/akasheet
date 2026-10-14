@@ -39,6 +39,27 @@ async function sealColumn(
   return { sealed, ok: true };
 }
 
+/** Best-effort; returns false on failure so migration can retry without marking complete. */
+async function tryWalCheckpointTruncate(db: SqlDriver): Promise<boolean> {
+  try {
+    await db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Clears free-list plaintext after in-place UPDATEs; failures are non-destructive. */
+async function tryFinalizeAtRestDb(db: SqlDriver): Promise<boolean> {
+  try {
+    await db.exec('PRAGMA secure_delete = ON');
+    await db.exec('VACUUM');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function hasRemainingPlainMedia(backend: MediaBackend, platformOs: string): Promise<boolean> {
   for (const key of await backend.keys()) {
     try {
@@ -101,9 +122,15 @@ export async function migrateAtRest(deps: {
     if (!res.ok) fieldsOk = false;
   }
 
-  const completed = mediaOk && fieldsOk;
-  if (completed) {
-    await deps.meta.set(DATA_PROTECTION_META, DATA_PROTECTION_VERSION);
+  let walOk = true;
+  if (fieldsOk) walOk = await tryWalCheckpointTruncate(deps.db);
+
+  let completed = false;
+  if (mediaOk && fieldsOk && walOk) {
+    if (await tryFinalizeAtRestDb(deps.db)) {
+      await deps.meta.set(DATA_PROTECTION_META, DATA_PROTECTION_VERSION);
+      completed = true;
+    }
   }
 
   return { mediaEncrypted, fieldsEncrypted: fieldCount > 0, completed };

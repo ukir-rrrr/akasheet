@@ -1,5 +1,9 @@
 import { createHash, webcrypto } from 'node:crypto';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
+import type { SqlDriver } from '../db/driver';
 import { migrate } from '../db/migrate';
 import { createBetterSqliteDriver } from '../db/testing/betterSqliteDriver';
 import type { MediaBackend } from '../media/store';
@@ -106,6 +110,91 @@ describe('migrateAtRest', () => {
     const row = await db.get<{ name: string }>('SELECT name FROM folders WHERE id = ?', ['f-decoy']);
     expect(isSealedField(row!.name)).toBe(true);
     expect(await fields.open(row!.name)).toBe(decoy);
+  });
+
+  it('does not leave folder plaintext in the WAL after sealing columns', async () => {
+    const plainName = 'WAL_PLAINTEXT_FOLDER_MARKER_歴史';
+    const key = await importAesKey(createHash('sha256').update('dek-wal').digest());
+    const fields = createFieldProtector(key);
+    const dir = mkdtempSync(join(tmpdir(), 'akasheet-migrate-wal-'));
+    const file = join(dir, 'akasheet.db');
+    const db = createBetterSqliteDriver(file);
+    await db.exec('PRAGMA journal_mode = WAL');
+    await migrate(db);
+    const meta = createMetaRepo(db);
+    await db.run(
+      'INSERT INTO folders (id, name, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, 1, 1, 1)',
+      ['f-wal', plainName, 'ai'],
+    );
+
+    const { backend } = memoryBackend();
+    const res = await migrateAtRest({ db, meta, mediaBackend: backend, dek: key, fields, platformOs: 'ios' });
+    expect(res.completed).toBe(true);
+    db.close();
+
+    const marker = Buffer.from(plainName, 'utf8');
+    const walPath = `${file}-wal`;
+    let walBytes: Buffer | null = null;
+    try {
+      walBytes = readFileSync(walPath);
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT') throw e;
+    }
+    if (walBytes && walBytes.length > 0) {
+      expect(walBytes.includes(marker)).toBe(false);
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('retries finalize when VACUUM fails without clearing sealed rows', async () => {
+    const key = await importAesKey(createHash('sha256').update('dek-vac').digest());
+    const fields = createFieldProtector(key);
+    const inner = createBetterSqliteDriver();
+    await migrate(inner);
+    const meta = createMetaRepo(inner);
+    await inner.run(
+      'INSERT INTO folders (id, name, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, 1, 1, 1)',
+      ['f-vac', 'retry-me', 'ai'],
+    );
+
+    let vacuumAttempts = 0;
+    const db: SqlDriver = {
+      ...inner,
+      async exec(sql) {
+        if (/^\s*VACUUM\s*$/i.test(sql.trim())) {
+          vacuumAttempts++;
+          if (vacuumAttempts === 1) throw new Error('vacuum blocked');
+        }
+        return inner.exec(sql);
+      },
+    };
+
+    const { backend } = memoryBackend();
+    const first = await migrateAtRest({
+      db,
+      meta,
+      mediaBackend: backend,
+      dek: key,
+      fields,
+      platformOs: 'web',
+    });
+    expect(first.completed).toBe(false);
+    expect((await meta.get(DATA_PROTECTION_META)) ?? null).toBeNull();
+
+    const rowAfterFail = await db.get<{ name: string }>('SELECT name FROM folders WHERE id = ?', ['f-vac']);
+    expect(isSealedField(rowAfterFail!.name)).toBe(true);
+
+    const second = await migrateAtRest({
+      db,
+      meta,
+      mediaBackend: backend,
+      dek: key,
+      fields,
+      platformOs: 'web',
+    });
+    expect(second.completed).toBe(true);
+    expect(vacuumAttempts).toBeGreaterThanOrEqual(2);
   });
 
   it('does not mark migration complete when media encryption fails', async () => {
