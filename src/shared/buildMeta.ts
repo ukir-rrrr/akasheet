@@ -44,7 +44,6 @@ function readAppVersion(extra: Record<string, unknown> | undefined): string {
   if (fromExtra) return fromExtra;
   const fromConfig = Constants.expoConfig?.version;
   if (typeof fromConfig === 'string' && fromConfig.length > 0) return fromConfig;
-  if (typeof fromConfig === 'number' && Number.isFinite(fromConfig)) return String(fromConfig);
   return '0.0.0';
 }
 
@@ -67,7 +66,7 @@ export function formatBuildAccessibilityLabel(meta: BuildMeta): string {
   if (meta.commitSha === BUILD_ID_UNKNOWN) {
     return `ビルド不明 · v${meta.version}`;
   }
-  const caption = formatBuildCaption(meta);
-  const dirtyNote = meta.dirty && meta.commitSha !== BUILD_ID_UNKNOWN ? '（未コミットの変更あり）' : '';
+  const caption = `${meta.commitSha} · v${meta.version}`;
+  const dirtyNote = meta.dirty ? '（未コミットの変更あり）' : '';
   return `ビルド ${caption}${dirtyNote}`;
 }

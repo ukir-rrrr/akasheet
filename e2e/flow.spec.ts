@@ -81,7 +81,10 @@ test('create a folder and a masked card, then review it', async ({ page }) => {
   await expect(page.getByTestId('create-first-folder')).toBeVisible({ timeout: 90_000 });
   const buildId = page.getByTestId('build-id');
   await expect(buildId).toHaveText(/^(unknown|[0-9a-f]{7})(\+dirty)? · v[\d.]+$/);
-  await expect(buildId).toHaveAttribute('aria-label', / · v[\d.]+$/);
+  await expect(buildId).toHaveAttribute(
+    'aria-label',
+    /^ビルド (unknown|[0-9a-f]{7}) · v[\d.]+(（未コミットの変更あり）)?$/,
+  );
   await shot('empty-state');
 
   await createFolder(page, '日本史');

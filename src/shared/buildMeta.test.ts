@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import appJson from '../../app.json';
 import { normalizeCommitSha as normalizeCommitShaScript } from '../../scripts/normalizeCommitSha';
 
 import Constants from 'expo-constants';
@@ -71,7 +72,7 @@ describe('formatBuildAccessibilityLabel', () => {
       formatBuildAccessibilityLabel({ commitSha: BUILD_ID_UNKNOWN, dirty: false, version: '1.0.0' }),
     ).toBe('ビルド不明 · v1.0.0');
     expect(formatBuildAccessibilityLabel({ commitSha: '1a2b3c4', dirty: true, version: '2.0.0' })).toBe(
-      'ビルド 1a2b3c4+dirty · v2.0.0（未コミットの変更あり）',
+      'ビルド 1a2b3c4 · v2.0.0（未コミットの変更あり）',
     );
   });
 });
@@ -85,16 +86,20 @@ describe('readBuildMeta', () => {
     const config = Constants.expoConfig!;
     const prevVersion = config.version;
     const prevExtra = config.extra;
-    config.version = undefined as unknown as string;
-    config.extra = { buildCommitSha: 'feedbac', buildDirty: false, buildAppVersion: '1.2.3' };
-    expect(readBuildMeta()).toEqual({ commitSha: 'feedbac', dirty: false, version: '1.2.3' });
-    config.version = prevVersion;
-    config.extra = prevExtra;
+    try {
+      config.version = undefined as unknown as string;
+      config.extra = { buildCommitSha: 'feedbac', buildDirty: false, buildAppVersion: '1.2.3' };
+      expect(readBuildMeta()).toEqual({ commitSha: 'feedbac', dirty: false, version: '1.2.3' });
+    } finally {
+      config.version = prevVersion;
+      config.extra = prevExtra;
+    }
   });
 });
 
 describe('app.config.js (config time)', () => {
   const root = join(__dirname, '..', '..');
+  const expectedAppVersion = appJson.expo.version;
 
   it('embeds buildAppVersion alongside git metadata in extra', () => {
     const out = execSync(
@@ -108,8 +113,8 @@ describe('app.config.js (config time)', () => {
       version: string;
       extra: { buildAppVersion: string; buildCommitSha: string };
     };
-    expect(config.version).toBe('1.0.0');
-    expect(config.extra.buildAppVersion).toBe('1.0.0');
+    expect(config.version).toBe(expectedAppVersion);
+    expect(config.extra.buildAppVersion).toBe(expectedAppVersion);
     expect(config.extra.buildCommitSha).toMatch(/^(unknown|[0-9a-f]{7})$/);
   });
 });
