@@ -139,7 +139,7 @@ export function useFolderActions() {
           value: 'import' as const,
           label: 'Anki / CSV を取り込む',
           icon: 'download-outline',
-          testID: 'menu-import',
+          testID: 'folder-list-menu-import',
         },
       ],
     });
