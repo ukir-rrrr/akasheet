@@ -1,4 +1,6 @@
-import initSqlJs, { type Database } from 'sql.js';
+// Metro/Hermes cannot resolve `node:fs` in sql.js's default entry; use the browser WASM build.
+import initSqlJs from 'sql.js/dist/sql-wasm-browser.js';
+import type { Database } from 'sql.js';
 
 let sqlPromise: ReturnType<typeof initSqlJs> | null = null;
 let wasmLocalUri: string | null | undefined;

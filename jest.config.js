@@ -6,7 +6,10 @@ module.exports = {
   testMatch: ['**/*.test.ts'],
   transform: { '^.+\\.[jt]sx?$': 'babel-jest' },
   transformIgnorePatterns: ['node_modules/(?!@noble/)'],
-  moduleNameMapper: { '^@/(.*)$': '<rootDir>/src/$1' },
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1',
+    '^sql\\.js/dist/sql-wasm-browser\\.js$': '<rootDir>/node_modules/sql.js/dist/sql-wasm.js',
+  },
   collectCoverageFrom: [
     'src/domain/**/*.ts',
     'src/data/**/*.ts',
