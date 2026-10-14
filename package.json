@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
-    "@peculiar/webcrypto": "^1.7.1",
+    "@noble/ciphers": "^2.4.0",
     "@shopify/react-native-skia": "2.6.2",
     "@tanstack/react-query": "^5.104.1",
     "expo": "~57.0.27",

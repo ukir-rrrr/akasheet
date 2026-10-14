@@ -5,6 +5,7 @@ module.exports = {
   roots: ['<rootDir>/src'],
   testMatch: ['**/*.test.ts'],
   transform: { '^.+\\.[jt]sx?$': 'babel-jest' },
+  transformIgnorePatterns: ['node_modules/(?!@noble/)'],
   moduleNameMapper: { '^@/(.*)$': '<rootDir>/src/$1' },
   collectCoverageFrom: [
     'src/domain/**/*.ts',
