@@ -32,7 +32,7 @@ akasheet は端末内 SQLite とローカル画像で完結している。本ド
 ### 概要
 
 - **拡張子**: `.akasheet`（実体は ZIP。`fflate` で生成／解析）。
-- **用途**: 差分または全量のスナップショットを1ファイルにまとめ、iCloud Drive・AirDrop・「ファイルに保存」等で他端末へ渡す。
+- **用途**: **全量（full）** スナップショットを1ファイルにまとめ、iCloud Drive・AirDrop・「ファイルに保存」等で他端末へ渡す。第1段階では差分（delta）は出さない。
 
 ### ファイルレイアウト
 
@@ -52,23 +52,23 @@ bundle.akasheet (zip)
 
 ### `manifest.json`
 
-| フィールド           | 型                    | 説明                                                      |
-| -------------------- | --------------------- | --------------------------------------------------------- |
-| `format`             | `"akasheet-sync"`     | 固定                                                      |
-| `bundle_version`     | `number`              | バンドル仕様の版（初期値 `1`）                            |
-| `app_version`        | `string`              | 書き出し時のアプリ版（`package.json` / `expo-constants`） |
-| `exported_at`        | `number`              | Unix ms（`Clock.now()`）                                  |
-| `exporter_device_id` | `string`              | `app_meta.device_id`                                      |
-| `exporter_time_zone` | `string`              | `deviceTimeZone()`                                        |
-| `mode`               | `"full"` \| `"delta"` | 全量 or カーソル以降の差分                                |
-| `cursor`             | `object`              | 下記「同期カーソル」                                      |
-| `content_encryption` | `"none"`              | 第1段階は **暗号化しない**（理由は後述）                  |
-| `row_counts`         | `object`              | 各 JSONL の行数（プレビュー用）                           |
-| `media_hashes`       | `string[]`            | 同梱した `media/<sha256>.bin` の一覧                      |
+| フィールド           | 型                | 説明                                                                             |
+| -------------------- | ----------------- | -------------------------------------------------------------------------------- |
+| `format`             | `"akasheet-sync"` | 固定                                                                             |
+| `bundle_version`     | `number`          | バンドル仕様の版（初期値 `1`）                                                   |
+| `app_version`        | `string`          | 書き出し時のアプリ版（`package.json` / `expo-constants`）                        |
+| `exported_at`        | `number`          | Unix ms（`Clock.now()`）                                                         |
+| `exporter_device_id` | `string`          | `app_meta.device_id`                                                             |
+| `exporter_time_zone` | `string`          | `deviceTimeZone()`                                                               |
+| `mode`               | `"full"`          | 第1段階は **常に `"full"`**（`"delta"` は第2段階以降の拡張）                     |
+| `cursor`             | `object`          | 下記「同期カーソル」（メタデータ・peer 比較用。第1段階は差分書き出しに使わない） |
+| `content_encryption` | `"none"`          | 第1段階は **暗号化しない**（理由は後述）                                         |
+| `row_counts`         | `object`          | 各 JSONL の行数（プレビュー用）                                                  |
+| `media_hashes`       | `string[]`        | 同梱した `media/<sha256>.bin` の一覧                                             |
 
 ### 同期カーソル（バンドル内）
 
-エクスポート時点の「この端末が知っている世界の先端」を記録する。
+エクスポート時点のスナップショット境界を記録する（取り込み側の **同一 peer 再取り込み警告** や、第2段階の delta 拡張の土台）。
 
 ```json
 {
@@ -77,15 +77,13 @@ bundle.akasheet (zip)
   "cards_max_updated_at": 456,
   "masks_max_updated_at": 789,
   "media_max_updated_at": 101,
-  "review_logs_max": { "reviewed_at": 999, "id": "01933..." },
-  "included_log_ids": ["..."]
+  "review_logs_max": { "reviewed_at": 999, "id": "01933..." }
 }
 ```
 
-- **delta モード**: ローカル `sync_state` の `last_exported_cursor` より新しい行だけ JSONL に載せる（`updated_at` または `review_logs` の `(reviewed_at, id)`）。
-- **full モード**: 論理削除行も含め、マージに必要な全行＋参照される全 `review_logs`＋未削除カードが参照する全 `media` ハッシュのファイルを同梱。
+**第1段階（full のみ）**: 論理削除行も含め、マージに必要な全行＋参照される全 `review_logs`＋ live カードが参照する全 `media` ハッシュのファイルを同梱する。`manifest.mode` は常に `"full"`。
 
-`included_log_ids` は delta で「今回送ったログ ID」を相手が重複取り込みを検知するために使う（任意だが推奨）。
+**第2段階以降（未実装）**: `mode: "delta"` とローカル `export_cursor` により、`updated_at` または `review_logs` の `(reviewed_at, id)` 以降の行だけ JSONL に載せる差分書き出しを検討する。`included_log_ids` 等の重複検知フィールドも delta 向け。
 
 ### 行 JSONL の1行
 
@@ -123,9 +121,9 @@ DB 行を JSON オブジェクト1行に直列化する。機微フィールド�
 
 1. `deleted_at` が非 null の行と null の行を比較する場合も **updated_at LWW** を先に適用する（削除も `updated_at` を更新している）。
 2. `updated_at` が大きい方が勝ち。
-3. 同点のとき **device_id タイブレーク**:
-   - `cards`: `created_device_id` は作成端末固定のためタイブレークに使わない。代わりに行の `id`（UUIDv7）の辞書順比較（RFC 9562 の時刻成分により実質「後に作られた ID」が勝つ）。
-   - `folders` / `masks` / `media`: 同様に **`id` の辞書順**（マイグレーションで `updated_device_id` を足す場合はそちらを優先する案を未決事項に記す）。
+3. 同点のとき **`id`（UUIDv7）の辞書順比較のみ**でタイブレーク（`folders` / `cards` / `masks` / `media` 共通）。`created_device_id` は作成端末固定のためタイブレークに使わない。RFC 9562 の時刻成分により、実質「後に採番された ID」が勝つ。
+
+`updated_device_id` 列は **第1段階では追加しない**。同点 LWW が問題になった場合のみ、後続 migration で検討する。
 
 **削除勝ち**: 勝った行の `deleted_at != null` なら論理削除を採用。
 
@@ -165,11 +163,15 @@ DB 行を JSON オブジェクト1行に直列化する。機微フィールド�
   2. 敗者 id は論理削除（`deleted_at = now`, `updated_at = now`）— または挿入をスキップし勝者の内容で更新（実装は1トランザクションで整合）。
 - `external_id` が null の手撮りカードは衝突しない（別 id のまま共存）。
 
+### 2.5.1 取り込みで新規フォルダを作るときの `sort_order`
+
+バンドルに含まれるフォルダがローカルに存在しない場合、マージ適用時に作成する。`sort_order` は **既存 live フォルダの `max(sort_order) + 1`** を起点とし、同一取り込みで複数フォルダを新規作成する場合は **バンドル内の出現順** に +1 ずつ割り当てる（`folderRepo` の並びと整合）。
+
 ### 2.6 マージの代数性（テストで保証）
 
 任意の端末ローカル状態 `A`, `B` とバンドル経由のマージ `⊕` について:
 
-- **冪等**: `A ⊕ export(A) = A`（同じカーソル以前の再取り込みは no-op）
+- **冪等**: `A ⊕ export(A) = A`（同一内容の full バンドルの再取り込みは no-op）
 - **可換**: `A ⊕ B` と `B ⊕ A` は往復後に一致（ログ和集合＋決定的 LWW）
 - **結合**: 3台チェーンでも最終的に同じ集合（実機はペアwise 同期で十分）
 
@@ -186,15 +188,16 @@ CREATE TABLE sync_state (
 );
 ```
 
-推奨キー（JSON の中身例）:
+第1段階で使うキー（JSON の中身例）:
 
-| key                   | 内容                                                                           |
-| --------------------- | ------------------------------------------------------------------------------ |
-| `export_cursor`       | 最後に **書き出した** カーソル（manifest と同型）                              |
-| `import_peers`        | `{ "<exporter_device_id>": { "last_cursor": {...}, "last_imported_at": ms } }` |
-| `last_full_export_at` | 全量エクスポート推奨のためのタイムスタンプ                                     |
+| key                   | 内容                                                                                                      |
+| --------------------- | --------------------------------------------------------------------------------------------------------- |
+| `import_peers`        | `{ "<exporter_device_id>": { "last_cursor": {...}, "last_imported_at": ms, "last_exported_at": ms } }` 等 |
+| `last_full_export_at` | 直近の full 書き出し完了時刻（GC・UX 用）                                                                 |
 
-**peer ごとのカーソル**: 同じ相手端末からの delta を二重適用しないため、`import_peers[exporter_device_id]` とバンドル `cursor` を比較し、既に含まれた範囲ならプレビューで警告。
+`export_cursor`（差分書き出し用のローカルカーソル）は **第1段階では持たない**。第2段階で delta を実装する際に `sync_state` へ追加する。
+
+**peer 管理**: 取り込み時に `import_peers[exporter_device_id]` を更新する。同じ相手から **同一 `exported_at`（または同一バンドルハッシュ）** の full を再取り込みする場合はプレビューで警告（第1段階は full のみのため、delta の「包含範囲」判定は第2段階）。
 
 ### 3.2 `server_version`（第1段階は任意）
 
@@ -205,15 +208,15 @@ CREATE TABLE sync_state (
 
 追加する場合は migration v3 で `DEFAULT 0`、既存行は 0。バンドル JSONL にも列を含める。
 
-### 3.3 `updated_device_id`（未決・推奨）
+### 3.3 `updated_device_id`（第1段階では採用しない）
 
-LWW 同点時に `id` 比較だけに頼らないなら、各 mutable 行に `updated_device_id TEXT` を追加し、タイブレークを `(updated_at, updated_device_id lex)` にする。第1実装 PR では **id タイブレークで開始**し、問題が出たら v3 migration で追加。
+LWW 同点は **`id` の辞書順のみ**（§2.1）。`updated_device_id` 列は追加しない。運用で同点衝突が目立つ場合に限り、後続 migration で `(updated_at, updated_device_id)` タイブレークを検討する。
 
 ### 3.4 マイグレーション手順
 
 1. `MIGRATIONS` に v3: `sync_state` テーブル作成のみ。
-2. 初回起動で `export_cursor` を「空」（全行を次回 full で出せる状態）で初期化。
-3. 既存ユーザーの DB はそのまま。同期機能はオプトイン UI。
+2. 初回起動で `import_peers` を `{}`、`last_full_export_at` を未設定（null 相当）で初期化。
+3. 既存ユーザーの DB はそのまま。同期機能はオプトイン UI（**iOS/Android・Expo Go**。Web 本番 UI には出さない — §5.5）。
 
 ### 3.5 物理削除（GC）条件の変更
 
@@ -221,13 +224,13 @@ LWW 同点時に `id` 比較だけに頼らないなら、各 mutable 行に `up
 
 **同期対応後**:
 
-- 論理削除された行は **バンドルに含めてから** でないと他端末に削除が伝わらない → delta export は `deleted_at` 変更も拾う。
+- 論理削除された行は **full バンドルに含めてから** でないと他端末に削除が伝わらない（第1段階は常に full 書き出し）。
 - **物理ファイル削除**は次をすべて満たすときのみ:
   1. ローカルで media が論理削除済み
-  2. `sync_state` の `export_cursor` が、その media の `updated_at` より新しい（＝削除を含む変更を少なくとも1回は書き出した）
-  3. （将来・複数 peer 時）各 `import_peers` のカーソルも同様に追いついている、または最後の full export 以降に当該メディアに変更なし
+  2. `sync_state.last_full_export_at` が、その media の `updated_at` 以降（＝削除を含む状態を少なくとも1回 full 書き出した）
+  3. （第2段階・複数 peer 時）各 `import_peers` が当該削除を取り込み済み、など追加条件を検討
 
-第1段階（2台・手動ファイル）では (1)(2) までで十分。peer 条件は第2段階または「peer 数 > 0」のとき有効化。
+第1段階（2台・手動 full ファイル）では (1)(2) までで十分。
 
 ---
 
@@ -274,16 +277,18 @@ src/sync/
 | 場所                                       | 操作                                                                                |
 | ------------------------------------------ | ----------------------------------------------------------------------------------- |
 | フォルダ一覧・右上 `⋯`（`folderListMenu`） | 「同期ファイルを書き出す」「同期ファイルを取り込む」を **Anki/CSV 取り込み** と並列 |
-| （任意・第1 PR 後）フォルダ詳細 `⋯`        | 「このフォルダだけ書き出す」（full の部分集合。未決: 第1段階は全量のみでも可）      |
+
+フォルダ詳細 `⋯` の「このフォルダだけ書き出す」は **将来候補**（第1段階スコープ外。常に全データ full）。
 
 ヘッダー右余白は `useHeaderBarInsets` / `headerBarPaddingRight` で Expo Go 歯車と重ならないこと（既存）。
 
 ### 5.2 書き出しフロー
 
-1. シート: 「全データを書き出す」（第1段階）／将来「前回以降の差分」
-2. 生成中インジケータ（大きい画像は時間がかかる）
-3. OS 共有シートまたは「ファイルに保存」（`expo-sharing` / DocumentDirectory → picker）
-4. 完了トースト: 「同期ファイルを作成しました」
+1. 「同期ファイルを書き出す」→ **全データの full** のみ（差分オプションは第2段階）
+2. 見積もりサイズが **50 MB 超** のとき、書き出し前に確認ダイアログで警告（ハードブロックはしない。続行可）。画像枚数による別閾値は設けない
+3. 生成中インジケータ（大きい画像は時間がかかる）
+4. OS 共有シートまたは「ファイルに保存」（`expo-sharing` / DocumentDirectory → picker）
+5. 完了トースト: 「同期ファイルを作成しました」。成功時に `last_full_export_at` を更新
 
 ### 5.3 取り込みフロー
 
@@ -301,20 +306,24 @@ src/sync/
 - タップ領域: 最小 44pt（`heights` / `IconButton`）。
 - 破壊的操作: `destructive` シート項目は使わない（取り込みは上書きマージだが復元不可ではない旨をプレビューで説明）。
 
+### 5.5 Web 版（第1段階は非対応）
+
+同期の書き出し／取り込み UI は **iOS・Android（Expo Go 想定）のみ**。Web 本番画面には同期入口を出さない。Playwright 向けの fixture バンドル直接適用フック（§6.2）は PR-B/C のテスト用として残してよい。
+
 ---
 
 ## 6. テスト計画
 
 ### 6.1 ユニット（Jest）
 
-| 対象                 | 内容                                                  |
-| -------------------- | ----------------------------------------------------- |
-| `merge/lww.ts`       | 同点 `updated_at`、削除 vs 更新、復活                 |
-| `merge/mergeLogs.ts` | ID 重複、undo 行、`device_id` 保持                    |
-| `merge/replay.ts`    | 既存 `sm2b` ゴールデンと整合、import アルゴリズム混在 |
-| `mergeAll`           | 冪等・可換・往復（fixture JSON を2台分合成）          |
-| `parseBundle`        | 壊れた zip、必須フィールド欠落、`sha256` 不一致       |
-| `cursor.ts`          | delta の包含判定                                      |
+| 対象                 | 内容                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------- |
+| `merge/lww.ts`       | 同点 `updated_at`、削除 vs 更新、復活                                                 |
+| `merge/mergeLogs.ts` | ID 重複、undo 行、`device_id` 保持                                                    |
+| `merge/replay.ts`    | 既存 `sm2b` ゴールデンと整合、import アルゴリズム混在                                 |
+| `mergeAll`           | 冪等・可換・往復（fixture JSON を2台分合成）                                          |
+| `parseBundle`        | 壊れた zip、必須フィールド欠落、`sha256` 不一致                                       |
+| `cursor.ts`          | カーソル比較（第2段階 delta 用。第1段階は peer 再取り込み警告の単体テストのみでも可） |
 
 `better-sqlite` ドライバ（`src/data/db/testing`）で2端末シナリオ:
 
@@ -325,7 +334,7 @@ src/sync/
 
 ### 6.2 Playwright（Web E2E）
 
-- 既存 `e2e/import.spec.ts` と同様、**Web は暗号化・ファイルピッカーの制約**があるため、テスト用に `sync` API を dev メニューまたは `testID` 付きボタンから **fixture バンドルを直接適用**するフックを第2実装 PR で追加。
+- 本番 Web UI に同期入口は出さない（§5.5）。既存 `e2e/import.spec.ts` と同様、テスト用に **fixture バンドルを直接適用**するフック（dev / `testID` 限定）を PR-B/C で追加する。
 - シナリオ案: 端末1でフォルダ＋カード作成 →（テスト用バンドル注入）→ 端末2表示で件数一致。
 
 ### 6.3 Maestro（モバイル・案）
@@ -344,11 +353,11 @@ Expo Go では共有シート自動化が難しいため、**開発用バンド�
 
 ## 7. 実装 PR の分割と完了条件
 
-| 順序                  | PR 内容                                                                                  | 完了条件                                                                                       |
-| --------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| **PR-A** マージコア   | `src/sync/merge/*`, `replay` 共通化, Jest（2台 fixture）                                 | `npm run verify`、カバレッジ維持、DB スキーマ変更なし                                          |
-| **PR-B** バンドル I/O | `exportBundle` / `parseBundle`, migration v3 `sync_state`, repo スナップショット読み取り | ラウンドトリップテスト（export→merge→DB 一致）、実ファイルはテスト fixture のみ（小さい JPEG） |
-| **PR-C** UI + 適用    | フォルダ一覧メニュー、プレビュー画面、`applyMergePlan`, GC 条件更新                      | Playwright 1 本、手動: iOS Expo Go で書き出し→別端末取り込み（QA メモ）、読み取り専用時は拒否  |
+| 順序                  | PR 内容                                                                                  | 完了条件                                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **PR-A** マージコア   | `src/sync/merge/*`, `replay` 共通化, Jest（2台 fixture）                                 | `npm run verify`、カバレッジ維持、DB スキーマ変更なし                                              |
+| **PR-B** バンドル I/O | `exportBundle` / `parseBundle`, migration v3 `sync_state`, repo スナップショット読み取り | ラウンドトリップテスト（export→merge→DB 一致）、実ファイルはテスト fixture のみ（小さい JPEG）     |
+| **PR-C** UI + 適用    | フォルダ一覧メニュー（モバイルのみ）、プレビュー、50 MB 警告、`applyMergePlan`, GC 更新  | Playwright 1 本（fixture 注入）、手動: iOS Expo Go で書き出し→別端末取り込み、読み取り専用時は拒否 |
 
 各 PR は独立にマージ可能だが、**ユーザー価値は PR-C** で出る。PR-A は品質の核なので先に入れる。
 
@@ -358,8 +367,9 @@ Expo Go では共有シート自動化が難しいため、**開発用バンド�
 
 ### 8.1 足すもの
 
-- **トランスポート**: HTTPS でバンドルと同型の JSONL チャンクを push/pull。認証は **端末生成の鍵ペア** または **QR での一回限りペアリング**（アカウントなし）。
-- **`server_version`**: 行ごとに単調増加。クライアント LWW は「サーバー版優先 → updated_at → device_id」。
+- **トランスポート**: HTTPS でバンドルと同型の JSONL チャンクを push/pull。差分（`mode: "delta"`）と `sync_state.export_cursor` による差分書き出しはここで足す。
+- **ペアリング UX**: QR・短いコード・端末鍵などは **第2段階で別途設計**（本設計 PR では方式を固定しない）。
+- **`server_version`**: 行ごとに単調増加。クライアント LWW は「サーバー版優先 → updated_at → `id` 辞書順」。
 - **`sync_state`**: `import_peers` をサーバー上の `device_id` レジストリと同期。
 - **画像**: 初回はハッシュで参照。未所持バイナリだけ GET `/media/<sha256>`（サーバーはオブジェクトストア、**ユーザー自身の S3 互換を想定しない**なら Cursor ホスティングは採用しない — 運用コスト制約）。
 
@@ -375,15 +385,17 @@ Expo Go では共有シート自動化が難しいため、**開発用バンド�
 
 ---
 
-## 未決事項
+## 第1段階の決定事項（確定）
 
-1. **delta のみ**を第1段階で出すか、常に **full** だけにするか（full のみなら `sync_state` は取り込み peer 管理だけで足りる）。
-2. LWW 同点タイブレークを **`id` 比較** のみで行うか、**`updated_device_id` 列**を追加するか。
-3. フォルダ **部分エクスポート**（単一 `folder_id`）の要否。
-4. バンドル **最大サイズ** 警告（画像枚数・合計 MB）の閾値。
-5. 取り込み時に **ローカル未存在フォルダ** を自動作成する際の `sort_order` 割り当て（max+1 でよいか）。
-6. Web 版で同期を **サポートするか**（ファイルピッカーは可能だが、実運用はモバイル想定）。
-7. 第2段階の **ペアリング UX**（QR / 6桁コード）の詳細。
+| #   | 項目                      | 決定                                                                                                                                                                                                                                |
+| --- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 書き出しモード            | **full のみ**。`manifest.mode` は常に `"full"`。delta / `export_cursor` 差分書き出しは第2段階で実装（本ドキュメントに拡張として記載するが **第1実装では実装しない**）。`sync_state` は `import_peers` と `last_full_export_at` 中心 |
+| 2   | LWW 同点タイブレーク      | **`id`（UUIDv7）辞書順のみ**。`updated_device_id` 列は第1段階では追加しない                                                                                                                                                         |
+| 3   | 部分エクスポート          | **なし**（全データ full のみ）。フォルダ詳細からの部分書き出しは将来候補                                                                                                                                                            |
+| 4   | バンドルサイズ            | 合計 **50 MB** 超で書き出し前に警告ダイアログ（ブロックしない）。枚数閾値は設けない                                                                                                                                                 |
+| 5   | 新規フォルダ `sort_order` | live の **`max(sort_order)+1`** 起点、複数は出現順に +1                                                                                                                                                                             |
+| 6   | Web 版                    | 第1段階 **非対応**（モバイル／Expo Go）。Playwright 用 fixture 注入はテストのみ                                                                                                                                                     |
+| 7   | 第2段階ペアリング         | 本 PR では未固定 → §8.1「別途設計」                                                                                                                                                                                                 |
 
 ---
 
