@@ -4,6 +4,8 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+const sampleJpeg = readFileSync(join(__dirname, '../../../assets/sample/textbook.jpg'));
+
 /** Builds a minimal .apkg with one Image Occlusion–style note for tests. */
 export function buildSampleApkg(): Uint8Array {
   const dir = mkdtempSync(join(tmpdir(), 'akasheet-apkg-'));
@@ -37,7 +39,7 @@ export function buildSampleApkg(): Uint8Array {
 
   db.close();
   const col = readFileSync(dbPath);
-  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+  const jpeg = sampleJpeg;
   const zip = zipSync({
     'collection.anki2': col,
     media: new TextEncoder().encode(JSON.stringify({ '0': 'pic.jpg' })),

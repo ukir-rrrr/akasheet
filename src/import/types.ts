@@ -106,20 +106,31 @@ export function ankiEaseFactor(factor: number): number {
 }
 
 /**
- * Anki card `due` の意味は type 依存。
- * - review (2): 収集作成日 crt（秒）からの日数 → (crt + due * 86400) 秒
- * - learning/relearning (1/3): エポック秒（ミリ秒へ変換）
+ * Anki card `due` の意味は type / queue 依存。
+ * - review (type 2): 収集作成日 crt（秒）からの日数 → (crt + due * 86400) 秒
+ * - learning (type 1): エポック秒（ミリ秒へ変換）
+ * - relearning (type 3): queue が review(2) なら日数、それ以外はエポック秒
  * - new (0): 現時刻扱い
  */
-export function ankiDueAtMs(crtSeconds: number, card: { due: number; type: number }, nowMs: number): number {
+export function ankiDueAtMs(
+  crtSeconds: number,
+  card: { due: number; type: number; queue: number },
+  nowMs: number,
+): number {
+  const dueAsEpochMs = (due: number) => (due >= 1_000_000_000_000 ? due : due * 1000);
+
   switch (card.type) {
     case 0:
       return nowMs;
     case 1:
-    case 3:
-      return card.due >= 1_000_000_000_000 ? card.due : card.due * 1000;
+      return dueAsEpochMs(card.due);
     case 2:
       return (crtSeconds + card.due * 86_400) * 1000;
+    case 3:
+      if (card.queue === 2) {
+        return (crtSeconds + card.due * 86_400) * 1000;
+      }
+      return dueAsEpochMs(card.due);
     default:
       return (crtSeconds + card.due * 86_400) * 1000;
   }

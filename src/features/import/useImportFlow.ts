@@ -14,9 +14,9 @@ export function useImportFlow() {
   const dialogs = useDialogs();
 
   return useCallback(async () => {
-    const pick = await pickImportFile();
-    if (!pick) return;
     await dialogs.attempt('ファイルを読み込めませんでした', async () => {
+      const pick = await pickImportFile();
+      if (!pick) return;
       const preview = await buildImportPreview(pick, app.clock.now());
       if (preview.cards.length === 0) {
         throw new Error('取り込めるカードがありません（Image Occlusion / マスク列を確認してください）');

@@ -3,6 +3,17 @@ import initSqlJs, { type Database } from 'sql.js';
 let sqlPromise: ReturnType<typeof initSqlJs> | null = null;
 let wasmLocalUri: string | null | undefined;
 
+async function loadBundledWasmAsset(): Promise<string> {
+  const { Asset } = await import('expo-asset');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const sqlWasmAsset = require('../../../assets/sql/sql-wasm.wasm');
+  const asset = Asset.fromModule(sqlWasmAsset);
+  await asset.downloadAsync();
+  const uri = asset.localUri ?? asset.uri;
+  if (!uri) throw new Error('sql-wasm asset has no URI');
+  return uri;
+}
+
 async function resolveWasmUri(): Promise<string> {
   if (wasmLocalUri !== undefined) {
     if (wasmLocalUri) return wasmLocalUri;
@@ -14,19 +25,8 @@ async function resolveWasmUri(): Promise<string> {
     return require.resolve('sql.js/dist/sql-wasm.wasm');
   }
 
-  const { Platform } = await import('react-native');
-  if (Platform.OS === 'web') {
-    wasmLocalUri = require.resolve('sql.js/dist/sql-wasm.wasm');
-    return wasmLocalUri;
-  }
-
   try {
-    const { Asset } = await import('expo-asset');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const sqlWasmAsset = require('../../../assets/sql/sql-wasm.wasm');
-    const asset = Asset.fromModule(sqlWasmAsset);
-    await asset.downloadAsync();
-    wasmLocalUri = asset.localUri;
+    wasmLocalUri = await loadBundledWasmAsset();
   } catch {
     wasmLocalUri = null;
   }

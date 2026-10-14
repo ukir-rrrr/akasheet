@@ -106,7 +106,12 @@ export function parseCsvZip(bytes: Uint8Array, fileName: string): ImportPreview 
     if (!img) return;
 
     drafts.push({
-      externalId: csvExternalId(imageFile, titleRaw && titleRaw.length > 0 ? titleRaw : null),
+      externalId: csvExternalId(
+        folderName,
+        imageFile,
+        titleRaw && titleRaw.length > 0 ? titleRaw : null,
+        masksRaw,
+      ),
       title: titleRaw && titleRaw.length > 0 ? titleRaw : null,
       folderPath: folderPathFromName(folderName),
       imageBytes: img.bytes,
@@ -151,8 +156,14 @@ export function parseCsvOnly(
     if (!bytes) return;
     const lower = imageFile.toLowerCase();
     const mime = lower.endsWith('.png') ? 'image/png' : lower.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+    const masksRaw = row[idx('masks')] ?? '';
     drafts.push({
-      externalId: csvExternalId(imageFile, titleRaw && titleRaw.length > 0 ? titleRaw : null),
+      externalId: csvExternalId(
+        folderName,
+        imageFile,
+        titleRaw && titleRaw.length > 0 ? titleRaw : null,
+        masksRaw,
+      ),
       title: titleRaw && titleRaw.length > 0 ? titleRaw : null,
       folderPath: folderPathFromName(folderName),
       imageBytes: bytes,

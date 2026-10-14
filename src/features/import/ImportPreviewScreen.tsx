@@ -78,7 +78,12 @@ export function ImportPreviewScreen({ preview }: Props) {
     <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
       <HeaderBar style={styles.header}>
         <IconButton icon="chevron-back" label="戻る" onPress={() => router.back()} />
-        <AppText variant="section" style={{ flex: 1 }} accessibilityRole="header">
+        <AppText
+          variant="section"
+          style={{ flex: 1 }}
+          accessibilityRole="header"
+          testID="import-preview-title"
+        >
           取り込みプレビュー
         </AppText>
       </HeaderBar>

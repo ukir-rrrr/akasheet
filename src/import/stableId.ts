@@ -9,6 +9,11 @@ export function stableImportKey(parts: readonly string[]): string {
   return h.toString(16).padStart(16, '0');
 }
 
-export function csvExternalId(imageFile: string, title: string | null): string {
-  return stableImportKey([imageFile, title ?? '']);
+export function csvExternalId(
+  folderName: string,
+  imageFile: string,
+  title: string | null,
+  masksRaw: string,
+): string {
+  return stableImportKey([folderName, imageFile, title ?? '', masksRaw]);
 }
