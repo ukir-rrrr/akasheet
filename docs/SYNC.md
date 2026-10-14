@@ -22,7 +22,7 @@ akasheet は端末内 SQLite とローカル画像で完結している。本ド
 - **行の更新時刻**: `updated_at`（LWW の主キー）。
 - **カード**: `created_device_id`、`source` + `external_id`（取り込み系は live 行のみ一意、`idx_cards_external`）。
 - **画像**: `media.sha256` 一意、パスは端末ローカル。実体は内容アドレス（ハッシュ）で突き合わせ。
-- **復習履歴**: `review_logs` は追記専用（`device_id`、`time_zone`、`undone_at`）。`review_states` はキャッシュ。
+- **復習履歴**: `review_logs` は **新規行の挿入が主**（`device_id`、`time_zone`）。既存行は **`undone_at` のみ** null → 時刻 の一方向更新（undo）が許される。`review_states` はキャッシュ。
 - **暗号化（PR #9 相当）**: DEK は Secure Store。DB の機微フィールド（マスク geometry 等）と画像は DEK で暗号化。読み取り専用モード時はマージ不可。
 
 ---
@@ -83,7 +83,7 @@ bundle.akasheet (zip)
 
 **第1段階（full のみ）**: 論理削除行も含め、マージに必要な全行＋参照される全 `review_logs`＋ live カードが参照する全 `media` ハッシュのファイルを同梱する。`manifest.mode` は常に `"full"`。
 
-**第2段階以降（未実装）**: `mode: "delta"` とローカル `export_cursor` により、`updated_at` または `review_logs` の `(reviewed_at, id)` 以降の行だけ JSONL に載せる差分書き出しを検討する。`included_log_ids` 等の重複検知フィールドも delta 向け。
+**第2段階以降（未実装）**: `mode: "delta"` とローカル `sync_state.export_cursor`（端末ローカルの単調増加 **`change_seq`** — 取り込み適用を含む **ローカル DB への書き込みごとに +1**）により、`change_seq` がカーソルより大きい行だけ JSONL に載せる差分書き出しを検討する。`review_logs` は `(reviewed_at, id)` の副カーソルで補助。`updated_at` だけを境界にしない（他端末取り込み行は元の `updated_at` を保持するため、再送漏れや端末時計ずれで欠落する）。`included_log_ids` 等の重複検知フィールドも delta 向け。
 
 ### 行 JSONL の1行
 
@@ -109,6 +109,14 @@ DB 行を JSON オブジェクト1行に直列化する。機微フィールド�
 
 ユーザーは共有先（iCloud 等）のアクセス制御に依存する。README の「教材写真をコミットしない」と同様、**同期ファイルも他人と共有しない前提**を UI で明示する。
 
+書き出し確認画面では、次の趣旨を必ず表示する（第1段階の決定事項 §「平文バンドル」）。
+
+> **このファイルは暗号化されません。自分の端末間だけで受け渡してください。**
+
+取り込み側は JSONL／画像を **端末の DEK で再 seal** し、端末内の保護水準を戻す。
+
+**未決（第2段階候補）**: バンドル全体のパスフレーズ暗号化（§1「バンドルを暗号化するか」の将来可案）。第1段階では採用しない。
+
 ---
 
 ## 2. マージ規則
@@ -131,17 +139,31 @@ DB 行を JSON オブジェクト1行に直列化する。機微フィールド�
 
 ### 2.2 `review_logs` の和集合
 
-- キー: `id`（UUIDv7）。**同一 ID は1行のみ**（完全一致ならスキップ）。
+- キー: `id`（UUIDv7）。**同一 ID は1行のみ**（全列完全一致ならスキップ）。
 - 新規 ID はすべて挿入（`device_id` はログに記録された値を保持。取り込み側の device_id で上書きしない）。
-- `undone_at` が設定されたログも行として同期し、マージ後に再生へ含める（未 undo のみ有効という扱いは DB と同じ）。
+- **同一 ID で他列は同じだが `undone_at` だけ異なる**（片方で undo 済み）場合の結合（決定的・可換）:
+  1. どちらかの `undone_at` が非 null なら、マージ結果も非 null（undo は一方向: null → 時刻）。
+  2. 両方非 null で値が異なるときは **`min(undone_at)`**（より早い undo を採用）。
+  3. 上記以外の列の不一致は想定しない（同一 ID は同一復習イベント）。
+- マージ後の replay は **`undone_at IS NULL` のログのみ**適用（§2.3）。undo された行はスキップされ、カード state は当該ログの効果を持たない。
 
 ### 2.3 `review_states` の再生
 
 マージでは **`review_states` 行を LWW しない**（ログと競合するため）。
 
-1. `review_logs` の和集合をカードごとにマージ。
-2. 各 `card_id` で `reviewRepo.replay` と同等の純関数 `replayReviewState(cardId, logs, scheduler, cardCreatedAt)` を実行（`src/domain/scheduler`、各ログの `time_zone` と `reviewRng(cardId, reviewed_at)` を使用）。
-3. 得られた状態で `review_states` を **UPSERT**（`algorithm` は live スケジューラ ID。import 由来ログは既存の `IMPORTED_ALGORITHM` 行を含めた上で replay）。
+現行 `reviewRepo.replay`（`src/data/repos/reviewRepo.ts`）は `algorithm` を見ず、**全ログ**を live スケジューラで `scheduler.initial(created_at)` から順再生する。一方 Anki/CSV 取り込みは `insertImportedReview` が **`review_states` を `IMPORTED_ALGORITHM` で直接書き**、ログも `algorithm=imported` で入れる。この差をマージ再生で吸収する規則:
+
+1. `review_logs` の和集合をカードごとにマージ（§2.2）。
+2. 各 `card_id` で純関数 `replayReviewStateForMerge(...)` を実行:
+   - **import 由来スナップショット**: マージ後ログ集合に `algorithm = IMPORTED_ALGORITHM` の行が1件以上ある、またはマージ前ローカルに `review_states.algorithm = IMPORTED_ALGORITHM` がある場合、**起点 state** は `review_states` の当該行（import 適用後の最終 state）とする。`IMPORTED_ALGORITHM` のログは **起点の計算には使わない**（二重適用防止）。
+   - **live ログのみ再生**: 起点のあと、`algorithm ≠ IMPORTED_ALGORITHM` かつ `undone_at IS NULL` のログを `reviewed_at`, `id` 昇順で live スケジューラに適用（各ログの `time_zone` と `reviewRng(cardId, reviewed_at)`）。
+   - import 由来のないカードは従来どおり `scheduler.initial(card.created_at)` から全 live ログを再生。
+3. 得られた状態で `review_states` を **UPSERT**（`algorithm` は live スケジューラ ID。import のみのカードは `IMPORTED_ALGORITHM` を維持）。
+
+**PR-A（マージコア）での実装・テスト**:
+
+- `src/sync/merge/replay.ts`（および `reviewRepo.replay` 共通化）に上記分岐を実装。現行の「全ログを initial から再生」は **マージ経路では使わない**。
+- Jest: Anki 取り込み済みカード（`IMPORTED_ALGORITHM` + imported ログ）に、片方端末だけ live 復習ログを足してマージ → **取り込み由来の state 成分が live ログ未追加時と一致**し、live 分だけが上乗せされること。マージ前後で import のみのカードの `review_states` が不変であること。
 
 取り込み専用の「最終 state だけ送る」フィールドは第1段階では載せない（ログが真実の源）。
 
@@ -160,7 +182,7 @@ DB 行を JSON オブジェクト1行に直列化する。機微フィールド�
 - インデックス: live 行のみ `UNIQUE(source, external_id)`（migration v2）。
 - **マージ時**: 取り込む `cards` 行が既存 live カードと同じ `(source, external_id)` だが **id が異なる**場合:
   1. **LWW で勝った行の id** を正とする。
-  2. 敗者 id は論理削除（`deleted_at = now`, `updated_at = now`）— または挿入をスキップし勝者の内容で更新（実装は1トランザクションで整合）。
+  2. 敗者 id は論理削除。`deleted_at` と `updated_at` は **`max(勝者.updated_at, 敗者.updated_at)`**（同じ入力なら端末・時計に依存しない）。挿入スキップ＋勝者行更新のみでもよい（1トランザクションで整合）。
 - `external_id` が null の手撮りカードは衝突しない（別 id のまま共存）。
 
 ### 2.5.1 取り込みで新規フォルダを作るときの `sort_order`
@@ -174,6 +196,8 @@ DB 行を JSON オブジェクト1行に直列化する。機微フィールド�
 - **冪等**: `A ⊕ export(A) = A`（同一内容の full バンドルの再取り込みは no-op）
 - **可換**: `A ⊕ B` と `B ⊕ A` は往復後に一致（ログ和集合＋決定的 LWW）
 - **結合**: 3台チェーンでも最終的に同じ集合（実機はペアwise 同期で十分）
+
+**第2段階 delta との関係**: 上記は第1段階の full マージについて。delta 書き出しは §1 の **`change_seq` 基準**にしないと、取り込み済み行の再送漏れで結合性が壊れる（Pullfrog 指摘）。`change_seq` はローカル書き込み順のみに依存し、LWW の `updated_at` とは独立。
 
 ---
 
@@ -195,7 +219,7 @@ CREATE TABLE sync_state (
 | `import_peers`        | `{ "<exporter_device_id>": { "last_cursor": {...}, "last_imported_at": ms, "last_exported_at": ms } }` 等 |
 | `last_full_export_at` | 直近の full 書き出し完了時刻（GC・UX 用）                                                                 |
 
-`export_cursor`（差分書き出し用のローカルカーソル）は **第1段階では持たない**。第2段階で delta を実装する際に `sync_state` へ追加する。
+`export_cursor`（差分書き出し用。値は **ローカル `change_seq` の最終値**）は **第1段階では持たない**。第2段階で delta を実装する際に `sync_state` へ追加し、行テーブル（または変更ログ）に **`change_seq INTEGER` を単調付与**する（マージ適用・取り込み・通常編集のいずれもローカル書き込みで増加）。delta は `change_seq > export_cursor` の行を送る（§1）。
 
 **peer 管理**: 取り込み時に `import_peers[exporter_device_id]` を更新する。同じ相手から **同一 `exported_at`（または同一バンドルハッシュ）** の full を再取り込みする場合はプレビューで警告（第1段階は full のみのため、delta の「包含範囲」判定は第2段階）。
 
@@ -287,7 +311,7 @@ src/sync/
 1. 「同期ファイルを書き出す」→ **全データの full** のみ（差分オプションは第2段階）
 2. 見積もりサイズが **50 MB 超** のとき、書き出し前に確認ダイアログで警告（ハードブロックはしない。続行可）。画像枚数による別閾値は設けない
 3. 生成中インジケータ（大きい画像は時間がかかる）
-4. OS 共有シートまたは「ファイルに保存」（`expo-sharing` / DocumentDirectory → picker）
+4. 非暗号化の注意（§1「バンドルを暗号化するか」）を表示したうえで OS 共有シートまたは「ファイルに保存」（`expo-sharing` / DocumentDirectory → picker）
 5. 完了トースト: 「同期ファイルを作成しました」。成功時に `last_full_export_at` を更新
 
 ### 5.3 取り込みフロー
@@ -316,14 +340,14 @@ src/sync/
 
 ### 6.1 ユニット（Jest）
 
-| 対象                 | 内容                                                                                  |
-| -------------------- | ------------------------------------------------------------------------------------- |
-| `merge/lww.ts`       | 同点 `updated_at`、削除 vs 更新、復活                                                 |
-| `merge/mergeLogs.ts` | ID 重複、undo 行、`device_id` 保持                                                    |
-| `merge/replay.ts`    | 既存 `sm2b` ゴールデンと整合、import アルゴリズム混在                                 |
-| `mergeAll`           | 冪等・可換・往復（fixture JSON を2台分合成）                                          |
-| `parseBundle`        | 壊れた zip、必須フィールド欠落、`sha256` 不一致                                       |
-| `cursor.ts`          | カーソル比較（第2段階 delta 用。第1段階は peer 再取り込み警告の単体テストのみでも可） |
+| 対象                 | 内容                                                                                                      |
+| -------------------- | --------------------------------------------------------------------------------------------------------- |
+| `merge/lww.ts`       | 同点 `updated_at`、削除 vs 更新、復活                                                                     |
+| `merge/mergeLogs.ts` | ID 重複、`undone_at` 結合（§2.2）、`device_id` 保持                                                       |
+| `merge/replay.ts`    | 既存 `sm2b` ゴールデンと整合、§2.3 の import スナップショット＋live のみ再生、取り込みカードの state 不変 |
+| `mergeAll`           | 冪等・可換・往復（fixture JSON を2台分合成）                                                              |
+| `parseBundle`        | 壊れた zip、必須フィールド欠落、`sha256` 不一致                                                           |
+| `cursor.ts`          | カーソル比較（第2段階 delta 用。第1段階は peer 再取り込み警告の単体テストのみでも可）                     |
 
 `better-sqlite` ドライバ（`src/data/db/testing`）で2端末シナリオ:
 
@@ -347,17 +371,19 @@ src/sync/
 # 共有シートは OS 依存のため、Maestro では Documents の固定パスにコピーする dev ビルドフラグを使う
 ```
 
-Expo Go では共有シート自動化が難しいため、**開発用バンドルをアプリ内に同梱して取り込む**デバッグ入口を Maestro 専用に限定する案（本番 UI には出さない）。
+Expo Go では共有シート自動化が難しいため、**開発用バンドルをアプリ内に同梱して取り込む**／Documents 固定パスから読むデバッグ入口を Maestro 専用に限定する案がある。
+
+**ビルド条件（必須）**: 上記デバッグ入口は **`__DEV__ === true`**、または **EAS `development` プロファイル**（`expo-constants` の `executionEnvironment` / `appOwnership` で判定）でのみコンパイル・リンクする。**release ビルド（本番・プレビュー配布）にはコードを含めない** — 任意 `.akasheet` をサイドロード取り込みできる経路を残さない。
 
 ---
 
 ## 7. 実装 PR の分割と完了条件
 
-| 順序                  | PR 内容                                                                                  | 完了条件                                                                                           |
-| --------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| **PR-A** マージコア   | `src/sync/merge/*`, `replay` 共通化, Jest（2台 fixture）                                 | `npm run verify`、カバレッジ維持、DB スキーマ変更なし                                              |
-| **PR-B** バンドル I/O | `exportBundle` / `parseBundle`, migration v3 `sync_state`, repo スナップショット読み取り | ラウンドトリップテスト（export→merge→DB 一致）、実ファイルはテスト fixture のみ（小さい JPEG）     |
-| **PR-C** UI + 適用    | フォルダ一覧メニュー（モバイルのみ）、プレビュー、50 MB 警告、`applyMergePlan`, GC 更新  | Playwright 1 本（fixture 注入）、手動: iOS Expo Go で書き出し→別端末取り込み、読み取り専用時は拒否 |
+| 順序                  | PR 内容                                                                                                                                                                   | 完了条件                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **PR-A** マージコア   | `src/sync/merge/*`, §2.3 の `replayReviewStateForMerge`（import スナップショット＋live ログ）, `reviewRepo.replay` 共通化, Jest（2台 fixture・取り込みカード state 不変） | `npm run verify`、カバレッジ維持、DB スキーマ変更なし                                              |
+| **PR-B** バンドル I/O | `exportBundle` / `parseBundle`, migration v3 `sync_state`, repo スナップショット読み取り                                                                                  | ラウンドトリップテスト（export→merge→DB 一致）、実ファイルはテスト fixture のみ（小さい JPEG）     |
+| **PR-C** UI + 適用    | フォルダ一覧メニュー（モバイルのみ）、プレビュー、50 MB 警告、`applyMergePlan`, GC 更新                                                                                   | Playwright 1 本（fixture 注入）、手動: iOS Expo Go で書き出し→別端末取り込み、読み取り専用時は拒否 |
 
 各 PR は独立にマージ可能だが、**ユーザー価値は PR-C** で出る。PR-A は品質の核なので先に入れる。
 
@@ -387,15 +413,16 @@ Expo Go では共有シート自動化が難しいため、**開発用バンド�
 
 ## 第1段階の決定事項（確定）
 
-| #   | 項目                      | 決定                                                                                                                                                                                                                                |
-| --- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | 書き出しモード            | **full のみ**。`manifest.mode` は常に `"full"`。delta / `export_cursor` 差分書き出しは第2段階で実装（本ドキュメントに拡張として記載するが **第1実装では実装しない**）。`sync_state` は `import_peers` と `last_full_export_at` 中心 |
-| 2   | LWW 同点タイブレーク      | **`id`（UUIDv7）辞書順のみ**。`updated_device_id` 列は第1段階では追加しない                                                                                                                                                         |
-| 3   | 部分エクスポート          | **なし**（全データ full のみ）。フォルダ詳細からの部分書き出しは将来候補                                                                                                                                                            |
-| 4   | バンドルサイズ            | 合計 **50 MB** 超で書き出し前に警告ダイアログ（ブロックしない）。枚数閾値は設けない                                                                                                                                                 |
-| 5   | 新規フォルダ `sort_order` | live の **`max(sort_order)+1`** 起点、複数は出現順に +1                                                                                                                                                                             |
-| 6   | Web 版                    | 第1段階 **非対応**（モバイル／Expo Go）。Playwright 用 fixture 注入はテストのみ                                                                                                                                                     |
-| 7   | 第2段階ペアリング         | 本 PR では未固定 → §8.1「別途設計」                                                                                                                                                                                                 |
+| #   | 項目                      | 決定                                                                                                                                                                                                                                                            |
+| --- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 書き出しモード            | **full のみ**。`manifest.mode` は常に `"full"`。delta / `export_cursor` 差分書き出しは第2段階で実装（本ドキュメントに拡張として記載するが **第1実装では実装しない**）。`sync_state` は `import_peers` と `last_full_export_at` 中心                             |
+| 2   | LWW 同点タイブレーク      | **`id`（UUIDv7）辞書順のみ**。`updated_device_id` 列は第1段階では追加しない                                                                                                                                                                                     |
+| 3   | 部分エクスポート          | **なし**（全データ full のみ）。フォルダ詳細からの部分書き出しは将来候補                                                                                                                                                                                        |
+| 4   | バンドルサイズ            | 合計 **50 MB** 超で書き出し前に警告ダイアログ（ブロックしない）。枚数閾値は設けない                                                                                                                                                                             |
+| 5   | 新規フォルダ `sort_order` | live の **`max(sort_order)+1`** 起点、複数は出現順に +1                                                                                                                                                                                                         |
+| 6   | Web 版                    | 第1段階 **非対応**（モバイル／Expo Go）。Playwright 用 fixture 注入はテストのみ                                                                                                                                                                                 |
+| 7   | 第2段階ペアリング         | 本 PR では未固定 → §8.1「別途設計」                                                                                                                                                                                                                             |
+| 8   | 平文バンドル（第1段階）   | **非暗号化**（`content_encryption: "none"`）。**DEK 同梱禁止**。書き出し時 UI で「暗号化されない・自分の端末間のみ」と明示。取り込み後は端末 DEK で再保護。**決定**: Akasheet Dev（オーナー riku から設計判断を委任済み・2026-10-13）。マージ報告で riku へ通知 |
 
 ---
 
