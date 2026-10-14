@@ -1,4 +1,6 @@
 import { execSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { normalizeCommitSha as normalizeCommitShaScript } from '../../scripts/normalizeCommitSha';
@@ -109,5 +111,27 @@ describe('resolveBuildMeta (config time)', () => {
     const sha = out.trim();
     expect(sha).toMatch(/^[0-9a-f]{7}$/);
     expect(sha).not.toBe('unknown');
+  });
+
+  it('does not mark dirty for untracked files only', () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'akasheet-buildmeta-'));
+    try {
+      writeFileSync(join(scratch, 'tracked.txt'), 'ok\n');
+      execSync(
+        'git init -q && git add tracked.txt && git -c user.email=t@test -c user.name=t commit -q -m init',
+        {
+          cwd: scratch,
+        },
+      );
+      mkdirSync(join(scratch, '.tmp'), { recursive: true });
+      writeFileSync(join(scratch, '.tmp', 'harness-out.txt'), 'scratch\n');
+      const scriptPath = join(root, 'scripts', 'resolveBuildMeta.js');
+      const nodeScript = `const { resolveBuildMeta } = require(${JSON.stringify(scriptPath)}); console.log(JSON.stringify(resolveBuildMeta()));`;
+      const out = execSync(`node -e ${JSON.stringify(nodeScript)}`, { cwd: scratch, encoding: 'utf8' });
+      const meta = JSON.parse(out.trim()) as { dirty: boolean };
+      expect(meta.dirty).toBe(false);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
   });
 });
