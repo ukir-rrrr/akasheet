@@ -57,6 +57,7 @@
     "jest-expo": "~58.0.9",
     "lint-staged": "^16.4.0",
     "prettier": "^3.9.10",
+    "semver": "6.3.1",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -70,7 +71,8 @@
     "format:check": "prettier --check .",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "verify": "npm run secrets && npm run typecheck && npm run lint && npm run format:check && npm run test:coverage",
+    "check:rn-peers": "node scripts/check-rn-peer-overrides.js",
+    "verify": "npm run secrets && npm run check:rn-peers && npm run typecheck && npm run lint && npm run format:check && npm run test:coverage",
     "e2e": "playwright test",
     "prepare": "husky",
     "postinstall": "node scripts/copy-canvaskit.js && node scripts/copy-sql-wasm.js",
@@ -78,5 +80,19 @@
     "secrets": "node scripts/secret-scan.js --self-test && node scripts/secret-scan.js"
   },
   "private": true,
-  "license": "MIT"
+  "license": "MIT",
+  "overrides": {
+    "@react-native-masked-view/masked-view": {
+      "react-native": "$react-native"
+    },
+    "@shopify/react-native-skia": {
+      "react-native": "$react-native"
+    },
+    "react-native-reanimated": {
+      "react-native": "$react-native"
+    },
+    "react-native-worklets": {
+      "react-native": "$react-native"
+    }
+  }
 }
