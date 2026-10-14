@@ -63,6 +63,7 @@ uploads/
 scratch/
 arena/
 tmp/
+.tmp/
 agent-tools/
 terminals/
 example/

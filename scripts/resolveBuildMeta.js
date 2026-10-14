@@ -19,7 +19,8 @@ function readGitShortSha() {
 }
 
 function readGitDirty() {
-  const out = execSync('git status --porcelain', {
+  // Tracked changes only — untracked files (e.g. Sim Setup `.tmp/`) must not mark the build dirty.
+  const out = execSync('git status --porcelain --untracked-files=no', {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
   });

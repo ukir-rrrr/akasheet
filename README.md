@@ -18,7 +18,7 @@ Mac がなくても、Windows / Linux の PC と iPhone があれば動かせま
 
 1. 必要なもの
    - Node.js 22 以上
-   - iPhone に [Expo Go](https://apps.apple.com/app/expo-go/id982107779)（Expo SDK 57 対応版）
+   - iPhone に [Expo Go](https://apps.apple.com/app/expo-go/id982107779)（Expo SDK 58 対応版）
    - PC と iPhone が同じ Wi-Fi につながっていること
 2. 取得して依存関係を入れます。
 
@@ -133,9 +133,11 @@ scripts/       サンプル画像の書き出し・秘密情報スキャンな�
 
 主な技術スタックは次のとおりです。
 
-- Expo SDK 57、React Native 0.86、TypeScript（strict）、expo-router
+- Expo SDK 58、React Native 0.88、TypeScript（strict）、expo-router
 - React Native Skia（描画）、Gesture Handler、Reanimated
 - expo-sqlite、TanStack Query、zod
+
+SDK 58 は `react-native@0.88.0-rc` を使うため、初回の `npm install` / `npm ci` では peer 依存の解決に `legacy-peer-deps` が必要です（CI も同様）。例: `NPM_CONFIG_LEGACY_PEER_DEPS=true npm install`
 
 ## 素材と著作権について
 
