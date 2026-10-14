@@ -113,23 +113,45 @@ describe('resolveBuildMeta (config time)', () => {
     expect(sha).not.toBe('unknown');
   });
 
+  const resolveBuildMetaInScratch = (scratch: string) => {
+    const scriptPath = join(root, 'scripts', 'resolveBuildMeta.js');
+    const nodeScript = `const { resolveBuildMeta } = require(${JSON.stringify(scriptPath)}); console.log(JSON.stringify(resolveBuildMeta()));`;
+    const out = execSync(`node -e ${JSON.stringify(nodeScript)}`, {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, BUILD_DIRTY: '', EXPO_PUBLIC_BUILD_DIRTY: '' },
+    });
+    return JSON.parse(out.trim()) as { dirty: boolean };
+  };
+
+  const initScratchGitRepo = (scratch: string) => {
+    writeFileSync(join(scratch, 'tracked.txt'), 'ok\n');
+    execSync(
+      'git init -q && git add tracked.txt && git -c user.email=t@test -c user.name=t commit -q -m init',
+      { cwd: scratch },
+    );
+  };
+
   it('does not mark dirty for untracked files only', () => {
     const scratch = mkdtempSync(join(tmpdir(), 'akasheet-buildmeta-'));
     try {
-      writeFileSync(join(scratch, 'tracked.txt'), 'ok\n');
-      execSync(
-        'git init -q && git add tracked.txt && git -c user.email=t@test -c user.name=t commit -q -m init',
-        {
-          cwd: scratch,
-        },
-      );
+      initScratchGitRepo(scratch);
       mkdirSync(join(scratch, '.tmp'), { recursive: true });
       writeFileSync(join(scratch, '.tmp', 'harness-out.txt'), 'scratch\n');
-      const scriptPath = join(root, 'scripts', 'resolveBuildMeta.js');
-      const nodeScript = `const { resolveBuildMeta } = require(${JSON.stringify(scriptPath)}); console.log(JSON.stringify(resolveBuildMeta()));`;
-      const out = execSync(`node -e ${JSON.stringify(nodeScript)}`, { cwd: scratch, encoding: 'utf8' });
-      const meta = JSON.parse(out.trim()) as { dirty: boolean };
+      const meta = resolveBuildMetaInScratch(scratch);
       expect(meta.dirty).toBe(false);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+
+  it('marks dirty when tracked files are modified', () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'akasheet-buildmeta-'));
+    try {
+      initScratchGitRepo(scratch);
+      writeFileSync(join(scratch, 'tracked.txt'), 'changed\n');
+      const meta = resolveBuildMetaInScratch(scratch);
+      expect(meta.dirty).toBe(true);
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }
