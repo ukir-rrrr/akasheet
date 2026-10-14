@@ -6,7 +6,14 @@ import type { FolderSummary } from '@/data/repos/folderRepo';
 import { flash, useFlash } from '@/features/app/flash';
 import { useFolders, useNextDue, useToday } from '@/features/app/queries';
 import { pushReview } from '@/features/review/reviewNavigation';
-import { CaptureDock } from '@/ui/Dock';
+import { BuildIdCaption } from '@/ui/BuildIdCaption';
+import {
+  CaptureDock,
+  buildIdCaptionBottom,
+  CAPTURE_DOCK_MIN_BOTTOM_PADDING,
+  folderListScrollPaddingBottom,
+  folderListToastBottom,
+} from '@/ui/Dock';
 import { formatCount, formatHeaderDate, formatRelativeDay, formatShortDate } from '@/ui/format';
 import {
   AppText,
@@ -20,7 +27,6 @@ import {
   Skeleton,
 } from '@/ui/primitives';
 import { heights, radius, space, useTheme } from '@/ui/theme';
-import { BuildIdCaption } from '@/ui/BuildIdCaption';
 import { Toast } from '@/ui/Toast';
 
 import { EmptyFolders } from './EmptyFolders';
@@ -139,7 +145,10 @@ export function FolderListScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 12, paddingBottom: (hasFolders ? 120 : 40) + insets.bottom },
+          {
+            paddingTop: insets.top + 12,
+            paddingBottom: folderListScrollPaddingBottom(insets.bottom, hasFolders),
+          },
         ]}
       >
         <View style={styles.headerRow}>
@@ -160,12 +169,19 @@ export function FolderListScreen() {
         />
       )}
       <View
-        style={[styles.buildIdSlot, { bottom: (hasFolders ? 96 : 12) + insets.bottom }]}
+        style={[
+          styles.buildIdSlot,
+          {
+            bottom: hasFolders
+              ? buildIdCaptionBottom(insets.bottom)
+              : Math.max(insets.bottom, CAPTURE_DOCK_MIN_BOTTOM_PADDING) + 4,
+          },
+        ]}
         pointerEvents="none"
       >
         <BuildIdCaption />
       </View>
-      <Toast spec={toast} onDone={flash.clear} bottom={hasFolders ? 100 + insets.bottom : 24} />
+      <Toast spec={toast} onDone={flash.clear} bottom={folderListToastBottom(insets.bottom, hasFolders)} />
     </View>
   );
 }

@@ -5,22 +5,7 @@
 
 const { execSync } = require('child_process');
 
-const SHORT_LEN = 7;
-const UNKNOWN = 'unknown';
-
-/** @param {string | undefined | null} raw */
-function normalizeCommitSha(raw) {
-  if (raw == null || typeof raw !== 'string') return UNKNOWN;
-  const trimmed = raw.trim().toLowerCase();
-  if (!trimmed || trimmed === UNKNOWN) return UNKNOWN;
-  const head = trimmed.startsWith('v') ? trimmed.slice(1) : trimmed;
-  if (/^[0-9a-f]{7}$/.test(head)) return head;
-  if (/^[0-9a-f]{40}$/.test(head)) return head.slice(0, SHORT_LEN);
-  if (head.length >= SHORT_LEN && /^[0-9a-f]+$/.test(head.slice(0, SHORT_LEN))) {
-    return head.slice(0, SHORT_LEN);
-  }
-  return UNKNOWN;
-}
+const { normalizeCommitSha, BUILD_ID_UNKNOWN } = require('./normalizeCommitSha');
 
 function envTruthy(v) {
   return v === '1' || v === 'true' || v === 'yes';
@@ -41,26 +26,40 @@ function readGitDirty() {
   return out.trim().length > 0;
 }
 
+function resolveDirtyFlag() {
+  if (envTruthy(process.env.EXPO_PUBLIC_BUILD_DIRTY) || envTruthy(process.env.BUILD_DIRTY)) {
+    return true;
+  }
+  try {
+    return readGitDirty();
+  } catch {
+    return false;
+  }
+}
+
+function shaFromEnv() {
+  const candidates = [
+    process.env.EXPO_PUBLIC_BUILD_COMMIT_SHA,
+    process.env.BUILD_COMMIT_SHA,
+    process.env.GIT_COMMIT,
+  ];
+  for (const raw of candidates) {
+    if (raw == null || raw === '') continue;
+    const sha = normalizeCommitSha(raw);
+    if (sha !== BUILD_ID_UNKNOWN) {
+      return sha;
+    }
+  }
+  return null;
+}
+
 /**
  * @returns {{ commitSha: string; dirty: boolean }}
  */
 function resolveBuildMeta() {
-  const fromEnv =
-    process.env.EXPO_PUBLIC_BUILD_COMMIT_SHA || process.env.BUILD_COMMIT_SHA || process.env.GIT_COMMIT;
-  if (fromEnv) {
-    return {
-      commitSha: normalizeCommitSha(fromEnv),
-      dirty:
-        envTruthy(process.env.EXPO_PUBLIC_BUILD_DIRTY) ||
-        envTruthy(process.env.BUILD_DIRTY) ||
-        (() => {
-          try {
-            return readGitDirty();
-          } catch {
-            return false;
-          }
-        })(),
-    };
+  const fromEnv = shaFromEnv();
+  if (fromEnv != null) {
+    return { commitSha: fromEnv, dirty: resolveDirtyFlag() };
   }
 
   try {
@@ -68,8 +67,13 @@ function resolveBuildMeta() {
     const dirty = readGitDirty();
     return { commitSha: sha, dirty };
   } catch {
-    return { commitSha: UNKNOWN, dirty: false };
+    return { commitSha: BUILD_ID_UNKNOWN, dirty: false };
   }
 }
 
-module.exports = { resolveBuildMeta, normalizeCommitSha, UNKNOWN, SHORT_LEN };
+module.exports = {
+  resolveBuildMeta,
+  normalizeCommitSha,
+  UNKNOWN: BUILD_ID_UNKNOWN,
+  SHORT_LEN: 7,
+};

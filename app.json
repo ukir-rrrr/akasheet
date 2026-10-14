@@ -58,7 +58,8 @@
           "cameraPermission": "教科書やノートを撮影してカードを作るためにカメラを使います。"
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

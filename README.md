@@ -47,11 +47,12 @@ Mac がなくても、Windows / Linux の PC と iPhone があれば動かせま
 フォルダ一覧画面の下端（撮る／選ぶドックのすぐ上、または空状態では画面下）に、**ビルド ID**（短い Git コミット SHA 7 文字とアプリ版 `v1.0.0` など）が薄いグレーで表示されます。未コミットの変更があるときは `+dirty` が付きます。
 
 1. 表示されている SHA が、手元で期待しているコミット（`git rev-parse --short=7 HEAD`）と一致するか確認します。
-2. 古いバンドル（Metro キャッシュ・古い tunnel・Expo Go の残留）を疑う場合は、次を順に試します。
+2. **コミットした直後**は、ビルド ID は Metro が `app.config.js` を読み直すまで古い SHA のままです。Fast Refresh だけでは更新されないので、**開発サーバー（Metro）を一度止めて再起動**してください（キャッシュが怪しいときは `npx expo start -c`）。
+3. 古いバンドル（Metro キャッシュ・古い tunnel・Expo Go の残留）を疑う場合は、次を順に試します。
    - Metro をキャッシュクリアで再起動: `npx expo start -c`
    - tunnel を使っている場合は開発サーバーを止めてから `npx expo start --tunnel` で再開
    - iPhone の Expo Go を完全終了してから QR を再読み取り
-3. `.git` のない tarball などでは `unknown` と表示されます（クラッシュしません）。
+4. `.git` のない tarball などでは `unknown` と表示されます（クラッシュしません）。
 
 ## ブラウザで試す
 

@@ -1,6 +1,11 @@
 import Constants from 'expo-constants';
 
-export const BUILD_ID_UNKNOWN = 'unknown';
+import {
+  BUILD_ID_UNKNOWN as SCRIPT_UNKNOWN,
+  normalizeCommitSha as normalizeCommitShaFromScript,
+} from '../../scripts/normalizeCommitSha';
+
+export const BUILD_ID_UNKNOWN = SCRIPT_UNKNOWN;
 
 export type BuildMeta = {
   commitSha: string;
@@ -10,14 +15,7 @@ export type BuildMeta = {
 
 /** Normalize env / git output to a 7-char lowercase hex SHA or `unknown`. */
 export function normalizeCommitSha(raw: string | null | undefined): string {
-  if (raw == null || typeof raw !== 'string') return BUILD_ID_UNKNOWN;
-  const trimmed = raw.trim().toLowerCase();
-  if (!trimmed || trimmed === BUILD_ID_UNKNOWN) return BUILD_ID_UNKNOWN;
-  const head = trimmed.startsWith('v') ? trimmed.slice(1) : trimmed;
-  if (/^[0-9a-f]{7}$/.test(head)) return head;
-  if (/^[0-9a-f]{40}$/.test(head)) return head.slice(0, 7);
-  if (head.length >= 7 && /^[0-9a-f]+$/.test(head.slice(0, 7))) return head.slice(0, 7);
-  return BUILD_ID_UNKNOWN;
+  return normalizeCommitShaFromScript(raw);
 }
 
 function readExtraRecord(): Record<string, unknown> | undefined {
@@ -36,7 +34,7 @@ function readShaFromExtra(extra: Record<string, unknown> | undefined): string | 
   return typeof v === 'string' ? v : undefined;
 }
 
-/** Runtime build metadata baked into the bundle via app config `extra` (and optional public env). */
+/** Runtime build metadata baked into the bundle via app config `extra`. */
 export function readBuildMeta(): BuildMeta {
   const extra = readExtraRecord();
   const commitSha = normalizeCommitSha(readShaFromExtra(extra));

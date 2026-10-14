@@ -88,8 +88,8 @@ module.exports = defineConfig([
     rules: { 'import/no-named-as-default-member': 'off' },
   },
   {
-    files: ['scripts/**/*.js', '*.config.js'],
-    languageOptions: { globals: globals.node },
+    files: ['scripts/**/*.js', '*.config.js', 'jest.setup.js'],
+    languageOptions: { globals: { ...globals.node, ...globals.jest } },
     rules: { 'expo/no-dynamic-env-var': 'off' },
   },
 ]);

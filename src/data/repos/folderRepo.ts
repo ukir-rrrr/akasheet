@@ -49,14 +49,18 @@ export function createFolderRepo(ctx: RepoContext) {
          GROUP BY f.id ORDER BY f.sort_order, f.created_at`,
         [dayEnd],
       );
-      return rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        color: toColor(r.color),
-        cardCount: r.card_count,
-        dueCount: r.due_count ?? 0,
-        lastReviewedAt: r.last_reviewed_at,
-      }));
+      const out: FolderSummary[] = [];
+      for (const r of rows) {
+        out.push({
+          id: r.id,
+          name: await ctx.fields.open(r.name),
+          color: toColor(r.color),
+          cardCount: r.card_count,
+          dueCount: r.due_count ?? 0,
+          lastReviewedAt: r.last_reviewed_at,
+        });
+      }
+      return out;
     },
 
     async get(id: string): Promise<Folder | null> {
@@ -64,7 +68,7 @@ export function createFolderRepo(ctx: RepoContext) {
         'SELECT id, name, color FROM folders WHERE id = ? AND deleted_at IS NULL',
         [id],
       );
-      return r ? { id: r.id, name: r.name, color: toColor(r.color) } : null;
+      return r ? { id: r.id, name: await ctx.fields.open(r.name), color: toColor(r.color) } : null;
     },
 
     async create(name: string, color?: FolderColor): Promise<Folder> {
@@ -78,7 +82,7 @@ export function createFolderRepo(ctx: RepoContext) {
         const chosen = color ?? FOLDER_COLORS[(count?.n ?? 0) % FOLDER_COLORS.length];
         await tx.run(
           'INSERT INTO folders (id, name, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-          [id, clean, chosen, (count?.mx ?? 0) + 1, now, now],
+          [id, await ctx.fields.seal(clean), chosen, (count?.mx ?? 0) + 1, now, now],
         );
         return { id, name: clean, color: chosen };
       });
@@ -88,7 +92,7 @@ export function createFolderRepo(ctx: RepoContext) {
       const clean = validateFolderName(name);
       const r = await db.run(
         'UPDATE folders SET name = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL',
-        [clean, clock.now(), id],
+        [await ctx.fields.seal(clean), clock.now(), id],
       );
       if (r.changes === 0) throw new ValidationError('フォルダが見つかりません');
     },

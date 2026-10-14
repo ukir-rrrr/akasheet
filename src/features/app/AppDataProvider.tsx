@@ -82,9 +82,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     );
   }
   if (!state.app) return <View style={{ flex: 1, backgroundColor: c.bg }} />;
-  return <AppDataContext.Provider value={state.app}>{children}</AppDataContext.Provider>;
+  return (
+    <AppDataContext.Provider value={state.app}>
+      {state.app.protection.mode === 'read-only' ? (
+        <View style={[styles.readOnly, { backgroundColor: c.shuTint, borderColor: c.warn }]}>
+          <AppText variant="sub" color={c.ink2}>
+            データ保護キーを利用できないため、閲覧のみ可能です（保存・復習の記録はできません）。
+          </AppText>
+        </View>
+      ) : null}
+      {children}
+    </AppDataContext.Provider>
+  );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  readOnly: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
 });

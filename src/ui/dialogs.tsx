@@ -103,7 +103,13 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   return (
     <DialogContext.Provider value={api}>
       {children}
-      <Modal transparent visible={req !== null} animationType="fade" onRequestClose={() => close(null)}>
+      <Modal
+        transparent
+        visible={req !== null}
+        animationType="fade"
+        presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
+        onRequestClose={() => close(null)}
+      >
         {req?.kind === 'sheet' && <SheetView req={req} onClose={close} />}
         {req?.kind === 'prompt' && <PromptView req={req} onClose={close} />}
       </Modal>

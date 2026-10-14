@@ -1,6 +1,8 @@
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 
+import { normalizeCommitSha as normalizeCommitShaScript } from '../../scripts/normalizeCommitSha';
+
 import {
   BUILD_ID_UNKNOWN,
   formatBuildAccessibilityLabel,
@@ -20,6 +22,13 @@ jest.mock('expo-constants', () => ({
 }));
 
 describe('normalizeCommitSha', () => {
+  it('matches the shared scripts/normalizeCommitSha module', () => {
+    const samples = ['AbCdEf0', 'xyzzy', '', '0123456789abcdef0123456789abcdef01234567'];
+    for (const s of samples) {
+      expect(normalizeCommitSha(s)).toBe(normalizeCommitShaScript(s));
+    }
+  });
+
   it('accepts 7-char hex', () => {
     expect(normalizeCommitSha('AbCdEf0')).toBe('abcdef0');
   });
@@ -90,5 +99,15 @@ describe('resolveBuildMeta (config time)', () => {
     expect(bad).toBe('unknown');
     expect(meta.commitSha).toMatch(/^(unknown|[0-9a-f]{7})$/);
     expect(typeof meta.dirty).toBe('boolean');
+  });
+
+  it('ignores invalid env SHA and falls back to git', () => {
+    const out = execSync(
+      `node -e "process.env.EXPO_PUBLIC_BUILD_COMMIT_SHA='not-a-sha'; const { resolveBuildMeta } = require('./scripts/resolveBuildMeta'); console.log(resolveBuildMeta().commitSha);"`,
+      { cwd: root, encoding: 'utf8' },
+    );
+    const sha = out.trim();
+    expect(sha).toMatch(/^[0-9a-f]{7}$/);
+    expect(sha).not.toBe('unknown');
   });
 });

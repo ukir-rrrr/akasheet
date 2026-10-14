@@ -45,6 +45,9 @@ async function createSampleCard(page: Page, folder: string, shot?: (name: string
   await page.getByTestId(`folder-row-${folder}`).click();
   await page.getByTestId('folder-try-sample').click();
   await expect(page.getByTestId('editor-canvas')).toBeVisible();
+  await page.getByTestId('editor-folder').click();
+  await expect(page.getByText('保存先のフォルダ')).toBeVisible();
+  await page.getByTestId('dialog-cancel').click();
   await expect(page.getByTestId('mask-count')).toHaveText('マスク 0');
   await page.waitForTimeout(1500);
   await shot?.('editor-opened');
