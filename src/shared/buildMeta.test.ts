@@ -3,10 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import appJson from '../../app.json';
 import { normalizeCommitSha as normalizeCommitShaScript } from '../../scripts/normalizeCommitSha';
+
+import Constants from 'expo-constants';
 
 import {
   BUILD_ID_UNKNOWN,
+  type BuildMeta,
   formatBuildAccessibilityLabel,
   formatBuildCaption,
   normalizeCommitSha,
@@ -61,22 +65,88 @@ describe('formatBuildCaption', () => {
 });
 
 describe('formatBuildAccessibilityLabel', () => {
-  it('uses Japanese labels', () => {
-    expect(formatBuildAccessibilityLabel({ commitSha: '1a2b3c4', dirty: false, version: '1' })).toBe(
-      'ビルド 1a2b3c4',
+  it('uses Japanese labels with version in the caption', () => {
+    expect(formatBuildAccessibilityLabel({ commitSha: '1a2b3c4', dirty: false, version: '1.0.0' })).toBe(
+      'ビルド 1a2b3c4 · v1.0.0',
     );
-    expect(formatBuildAccessibilityLabel({ commitSha: BUILD_ID_UNKNOWN, dirty: false, version: '1' })).toBe(
-      'ビルド不明',
+    expect(
+      formatBuildAccessibilityLabel({ commitSha: BUILD_ID_UNKNOWN, dirty: false, version: '1.0.0' }),
+    ).toBe('ビルド不明 · v1.0.0');
+    expect(formatBuildAccessibilityLabel({ commitSha: '1a2b3c4', dirty: true, version: '2.0.0' })).toBe(
+      'ビルド 1a2b3c4 · v2.0.0（未コミットの変更あり）',
     );
-    expect(formatBuildAccessibilityLabel({ commitSha: '1a2b3c4', dirty: true, version: '1' })).toBe(
-      'ビルド 1a2b3c4（未コミットの変更あり）',
-    );
+  });
+});
+
+describe('build caption and accessibility label', () => {
+  const cases: BuildMeta[] = [
+    { commitSha: '1a2b3c4', dirty: false, version: '1.0.0' },
+    { commitSha: '1a2b3c4', dirty: true, version: '2.0.0' },
+    { commitSha: BUILD_ID_UNKNOWN, dirty: false, version: '1.0.0' },
+    { commitSha: BUILD_ID_UNKNOWN, dirty: true, version: '3.1.4' },
+  ];
+
+  it('keeps the same · v{version} suffix on caption and label', () => {
+    for (const meta of cases) {
+      const caption = formatBuildCaption(meta);
+      const label = formatBuildAccessibilityLabel(meta);
+      const versionSuffix = ` · v${meta.version}`;
+      expect(caption.endsWith(versionSuffix)).toBe(true);
+      expect(label).toContain(versionSuffix);
+    }
+  });
+
+  it('matches golden strings for known, unknown, and dirty', () => {
+    expect(formatBuildCaption(cases[0])).toBe('1a2b3c4 · v1.0.0');
+    expect(formatBuildAccessibilityLabel(cases[0])).toBe('ビルド 1a2b3c4 · v1.0.0');
+    expect(formatBuildCaption(cases[1])).toBe('1a2b3c4+dirty · v2.0.0');
+    expect(formatBuildAccessibilityLabel(cases[1])).toBe('ビルド 1a2b3c4 · v2.0.0（未コミットの変更あり）');
+    expect(formatBuildCaption(cases[2])).toBe('unknown · v1.0.0');
+    expect(formatBuildAccessibilityLabel(cases[2])).toBe('ビルド不明 · v1.0.0');
+    expect(formatBuildCaption(cases[3])).toBe('unknown · v3.1.4');
+    expect(formatBuildAccessibilityLabel(cases[3])).toBe('ビルド不明 · v3.1.4（未コミットの変更あり）');
   });
 });
 
 describe('readBuildMeta', () => {
   it('reads from mocked expo extra', () => {
     expect(readBuildMeta()).toEqual({ commitSha: 'abcdef0', dirty: false, version: '1.0.0' });
+  });
+
+  it('prefers buildAppVersion in extra when expoConfig.version is missing', () => {
+    const config = Constants.expoConfig!;
+    const prevVersion = config.version;
+    const prevExtra = config.extra;
+    try {
+      config.version = undefined as unknown as string;
+      config.extra = { buildCommitSha: 'feedbac', buildDirty: false, buildAppVersion: '1.2.3' };
+      expect(readBuildMeta()).toEqual({ commitSha: 'feedbac', dirty: false, version: '1.2.3' });
+    } finally {
+      config.version = prevVersion;
+      config.extra = prevExtra;
+    }
+  });
+});
+
+describe('app.config.js (config time)', () => {
+  const root = join(__dirname, '..', '..');
+  const expectedAppVersion = appJson.expo.version;
+
+  it('embeds buildAppVersion alongside git metadata in extra', () => {
+    const out = execSync(
+      `node -e "const c = require('./app.config.js')(); console.log(JSON.stringify(c));"`,
+      {
+        cwd: root,
+        encoding: 'utf8',
+      },
+    );
+    const config = JSON.parse(out.trim()) as {
+      version: string;
+      extra: { buildAppVersion: string; buildCommitSha: string };
+    };
+    expect(config.version).toBe(expectedAppVersion);
+    expect(config.extra.buildAppVersion).toBe(expectedAppVersion);
+    expect(config.extra.buildCommitSha).toMatch(/^(unknown|[0-9a-f]{7})$/);
   });
 });
 
