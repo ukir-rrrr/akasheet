@@ -9,12 +9,15 @@ const { resolveBuildMeta } = require('./scripts/resolveBuildMeta');
  */
 module.exports = () => {
   const { commitSha, dirty } = resolveBuildMeta();
+  const appVersion =
+    typeof appJson.expo.version === 'string' && appJson.expo.version ? appJson.expo.version : '0.0.0';
   return {
     ...appJson.expo,
     extra: {
       ...(appJson.expo.extra ?? {}),
       buildCommitSha: commitSha,
       buildDirty: dirty,
+      buildAppVersion: appVersion,
     },
   };
 };

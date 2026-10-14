@@ -34,13 +34,26 @@ function readShaFromExtra(extra: Record<string, unknown> | undefined): string | 
   return typeof v === 'string' ? v : undefined;
 }
 
+function readVersionFromExtra(extra: Record<string, unknown> | undefined): string | undefined {
+  const v = extra?.buildAppVersion;
+  return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
+
+function readAppVersion(extra: Record<string, unknown> | undefined): string {
+  const fromExtra = readVersionFromExtra(extra);
+  if (fromExtra) return fromExtra;
+  const fromConfig = Constants.expoConfig?.version;
+  if (typeof fromConfig === 'string' && fromConfig.length > 0) return fromConfig;
+  if (typeof fromConfig === 'number' && Number.isFinite(fromConfig)) return String(fromConfig);
+  return '0.0.0';
+}
+
 /** Runtime build metadata baked into the bundle via app config `extra`. */
 export function readBuildMeta(): BuildMeta {
   const extra = readExtraRecord();
   const commitSha = normalizeCommitSha(readShaFromExtra(extra));
   const dirty = readDirtyFromExtra(extra);
-  const version =
-    (typeof Constants.expoConfig?.version === 'string' && Constants.expoConfig.version) || '0.0.0';
+  const version = readAppVersion(extra);
   return { commitSha, dirty, version };
 }
 
@@ -51,9 +64,10 @@ export function formatBuildCaption(meta: BuildMeta): string {
 }
 
 export function formatBuildAccessibilityLabel(meta: BuildMeta): string {
-  const base = meta.commitSha === BUILD_ID_UNKNOWN ? 'ビルド不明' : `ビルド ${meta.commitSha}`;
-  if (meta.dirty && meta.commitSha !== BUILD_ID_UNKNOWN) {
-    return `${base}（未コミットの変更あり）`;
+  if (meta.commitSha === BUILD_ID_UNKNOWN) {
+    return `ビルド不明 · v${meta.version}`;
   }
-  return base;
+  const caption = formatBuildCaption(meta);
+  const dirtyNote = meta.dirty && meta.commitSha !== BUILD_ID_UNKNOWN ? '（未コミットの変更あり）' : '';
+  return `ビルド ${caption}${dirtyNote}`;
 }
