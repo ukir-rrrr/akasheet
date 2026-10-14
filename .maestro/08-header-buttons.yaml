@@ -28,6 +28,12 @@ appId: host.exp.exponent
 - assertVisible:
     id: editor-save
 - tapOn:
+    id: editor-folder
+- assertVisible:
+    id: dialog-cancel
+- tapOn:
+    id: dialog-cancel
+- tapOn:
     id: editor-close
 - tapOn:
     id: dialog-confirm
