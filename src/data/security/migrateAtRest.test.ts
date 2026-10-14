@@ -1,5 +1,6 @@
 import { createHash, webcrypto } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import Database from 'better-sqlite3';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -130,20 +131,62 @@ describe('migrateAtRest', () => {
     const { backend } = memoryBackend();
     const res = await migrateAtRest({ db, meta, mediaBackend: backend, dek: key, fields, platformOs: 'ios' });
     expect(res.completed).toBe(true);
-    db.close();
 
     const marker = Buffer.from(plainName, 'utf8');
     const walPath = `${file}-wal`;
-    let walBytes: Buffer | null = null;
-    try {
-      walBytes = readFileSync(walPath);
-    } catch (e) {
-      const code = (e as NodeJS.ErrnoException).code;
-      if (code !== 'ENOENT') throw e;
-    }
-    if (walBytes && walBytes.length > 0) {
-      expect(walBytes.includes(marker)).toBe(false);
-    }
+    expect(existsSync(walPath)).toBe(true);
+    const walBytes = readFileSync(walPath);
+    expect(walBytes.includes(marker)).toBe(false);
+
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('does not mark migration complete when wal_checkpoint is busy', async () => {
+    const key = await importAesKey(createHash('sha256').update('dek-wal-busy').digest());
+    const fields = createFieldProtector(key);
+    const dir = mkdtempSync(join(tmpdir(), 'akasheet-migrate-wal-busy-'));
+    const file = join(dir, 'akasheet.db');
+    const db = createBetterSqliteDriver(file);
+    await db.exec('PRAGMA journal_mode = WAL');
+    await migrate(db);
+    const meta = createMetaRepo(db);
+    await db.run(
+      'INSERT INTO folders (id, name, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, 1, 1, 1)',
+      ['f-busy', 'blocked-checkpoint', 'ai'],
+    );
+
+    const blocker = new Database(file);
+    blocker.exec('BEGIN');
+    blocker.prepare('SELECT COUNT(*) AS n FROM folders').get();
+
+    const { backend } = memoryBackend();
+    const blocked = await migrateAtRest({
+      db,
+      meta,
+      mediaBackend: backend,
+      dek: key,
+      fields,
+      platformOs: 'ios',
+    });
+    expect(blocked.completed).toBe(false);
+    expect((await meta.get(DATA_PROTECTION_META)) ?? null).toBeNull();
+
+    blocker.exec('ROLLBACK');
+    blocker.close();
+
+    const retry = await migrateAtRest({
+      db,
+      meta,
+      mediaBackend: backend,
+      dek: key,
+      fields,
+      platformOs: 'ios',
+    });
+    expect(retry.completed).toBe(true);
+    expect((await meta.get(DATA_PROTECTION_META)) === DATA_PROTECTION_VERSION).toBe(true);
+
+    db.close();
     rmSync(dir, { recursive: true, force: true });
   });
 

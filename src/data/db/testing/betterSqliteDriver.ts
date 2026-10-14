@@ -1,6 +1,12 @@
 import Database from 'better-sqlite3';
 
 import type { SqlDriver, SqlParam } from '../driver';
+import { isWalCheckpointComplete, type WalCheckpointRow, walCheckpointBusy } from '../walCheckpoint';
+
+function walCheckpointTruncate(raw: Database.Database): boolean {
+  const rows = raw.pragma('wal_checkpoint(TRUNCATE)') as WalCheckpointRow[];
+  return isWalCheckpointComplete(walCheckpointBusy(rows[0]));
+}
 
 /** Test-only driver: runs the production SQL against an in-process SQLite. */
 export function createBetterSqliteDriver(
@@ -40,7 +46,7 @@ export function createBetterSqliteDriver(
     try {
       raw.exec('PRAGMA secure_delete = ON');
       raw.exec('VACUUM');
-      raw.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+      if (!walCheckpointTruncate(raw)) return false;
       return true;
     } catch (e) {
       if (process.env.NODE_ENV !== 'production') {
