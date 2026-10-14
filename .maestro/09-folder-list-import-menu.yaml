@@ -1,16 +1,13 @@
-appId: host.exp.exponent
+appId: ${EXPO_GO_APP_ID_IOS}
+tags:
+  - smoke
 ---
 # Folder list ⋯ menu exposes import action in the a11y tree (testID tap, not text regex).
-- launchApp
-- extendedWaitUntil:
-    visible:
-      id: create-first-folder
-    timeout: 120000
-- tapOn:
-    id: create-first-folder
-- inputText: '英単語'
-- tapOn:
-    id: prompt-confirm
+- runFlow: subflows/open-expo-project.yaml
+- runFlow:
+    file: subflows/create-folder.yaml
+    env:
+      FOLDER_NAME: 英単語
 - extendedWaitUntil:
     visible:
       id: folder-list-menu

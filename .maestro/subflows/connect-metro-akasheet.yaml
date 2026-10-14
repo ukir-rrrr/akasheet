@@ -1,0 +1,17 @@
+# Open Metro deep link and wait until the folder list screen is ready (empty or with folders).
+---
+- openLink: ${EXPO_DEV_SERVER_URL}
+- runFlow:
+    when:
+      visible: Open
+    commands:
+      - tapOn: Open
+- runFlow:
+    when:
+      visible: 'Open in "Expo Go"'
+    commands:
+      - tapOn: Open
+- extendedWaitUntil:
+    visible:
+      id: folder-list-menu
+    timeout: 120000

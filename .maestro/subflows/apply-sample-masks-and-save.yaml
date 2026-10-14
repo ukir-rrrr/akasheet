@@ -1,0 +1,28 @@
+# Sample textbook editor: three masks (two strokes + one rect) then save to folder detail.
+---
+- tapOn:
+    id: folder-try-sample
+- extendedWaitUntil:
+    visible:
+      id: editor-canvas
+    timeout: 60000
+- swipe:
+    start: 20%, 28%
+    end: 55%, 28%
+    duration: 700
+- swipe:
+    start: 22%, 42%
+    end: 62%, 42%
+    duration: 700
+- tapOn:
+    id: tool-rect
+- swipe:
+    start: 45%, 58%
+    end: 72%, 68%
+    duration: 700
+- tapOn:
+    id: editor-save
+- extendedWaitUntil:
+    visible:
+      id: card-thumb
+    timeout: 60000

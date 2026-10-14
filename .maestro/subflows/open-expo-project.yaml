@@ -1,0 +1,4 @@
+# Opens akasheet inside Expo Go 58 via Metro deep link (cold bundle may take up to 2 minutes).
+---
+- runFlow: subflows/launch-expo-go.yaml
+- runFlow: subflows/connect-metro-akasheet.yaml

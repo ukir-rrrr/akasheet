@@ -1,2 +1,31 @@
-# Expo Go (SDK 58). Production / standalone builds use a different application id.
-appId: host.exp.exponent
+# Expo Go (SDK 58) Maestro workspace for akasheet.
+#
+# iOS bundle id is case-sensitive: host.exp.Exponent (not host.exp.exponent).
+# Android package name is host.exp.exponent.
+#
+# Override EXPO_DEV_SERVER_URL when Metro is not on localhost (LAN IP, tunnel, etc.):
+#   EXPO_DEV_SERVER_URL='exp://192.168.1.10:8081' maestro test .maestro/00-launch.yaml
+env:
+  EXPO_DEV_SERVER_URL: exp://127.0.0.1:8081
+  EXPO_GO_APP_ID_IOS: host.exp.Exponent
+  EXPO_GO_APP_ID_ANDROID: host.exp.exponent
+
+flows:
+  - '*.yaml'
+  - '!subflows/**'
+
+executionOrder:
+  continueOnFailure: true
+  flowsOrder:
+    - 00-launch
+    - 01-create-folder
+    - 02-sample-editor
+    - 03-masks-save
+    - 04-review-reveal
+    - 05-review-answers
+    - 06-summary-back
+    - 07-folder-rename
+    - 08-header-buttons
+    - 09-folder-list-import-menu
+    - i-csv
+    - i-anki

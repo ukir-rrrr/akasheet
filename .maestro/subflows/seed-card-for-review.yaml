@@ -1,0 +1,10 @@
+# Folder「日本史」→ sample editor → three masks → saved card on folder detail.
+---
+- runFlow: subflows/open-expo-project.yaml
+- runFlow:
+    file: subflows/create-folder.yaml
+    env:
+      FOLDER_NAME: 日本史
+- tapOn:
+    id: folder-row-日本史
+- runFlow: subflows/apply-sample-masks-and-save.yaml

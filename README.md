@@ -106,6 +106,8 @@ npx playwright install chromium   # 初回のみ
 npm run e2e                       # 開発サーバーが起動していなければ自動で起動します
 ```
 
+iOS の Expo Go 58 向け Maestro フローは `.maestro/` にあります（起動 URL・appId の大文字小文字・`folder-list-menu-import` など）。手順は [.maestro/README.md](.maestro/README.md) を参照してください。
+
 シナリオは次のとおりです。
 
 1. フォルダを作成し、サンプルページからカードを作ります。

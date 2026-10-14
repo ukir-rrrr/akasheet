@@ -1,0 +1,16 @@
+# Launch Expo Go without clearing app storage (shared by most flows).
+---
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          appId: ${EXPO_GO_APP_ID_IOS}
+          clearState: false
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          appId: ${EXPO_GO_APP_ID_ANDROID}
+          clearState: false

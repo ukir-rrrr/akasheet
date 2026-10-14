@@ -1,27 +1,27 @@
-appId: host.exp.exponent
+appId: ${EXPO_GO_APP_ID_IOS}
+tags:
+  - smoke
 ---
 # Folder detail ⋯ menu must stay left of Expo Go's floating dev-menu gear.
-- launchApp
-- extendedWaitUntil:
-    visible:
-      id: create-first-folder
-    timeout: 120000
-- tapOn:
-    id: create-first-folder
-- inputText: '日本史'
-- tapOn:
-    id: prompt-confirm
+- runFlow: subflows/open-expo-project.yaml
+- runFlow:
+    file: subflows/create-folder.yaml
+    env:
+      FOLDER_NAME: 日本史
 - tapOn:
     id: folder-row-日本史
 - tapOn:
     id: folder-menu
 - tapOn:
     id: menu-rename
+- tapOn:
+    id: prompt-input
 - eraseText
-- inputText: '世界史'
+- inputText: 世界史
 - tapOn:
     id: prompt-confirm
-- assertVisible: '世界史'
+- assertVisible:
+    id: folder-detail-title
 - tapOn:
     id: back
 - assertVisible:

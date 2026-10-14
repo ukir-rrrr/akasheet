@@ -1,0 +1,16 @@
+appId: ${EXPO_GO_APP_ID_IOS}
+tags:
+  - smoke
+---
+# Cold launch via Expo Go deep link; empty folder list is ready.
+# Uses clearState on launch so this flow can be run twice in a row (see README).
+- runFlow: subflows/launch-expo-go-clear.yaml
+- runFlow: subflows/connect-metro-akasheet.yaml
+- extendedWaitUntil:
+    visible:
+      id: create-first-folder
+    timeout: 60000
+- assertVisible:
+    id: create-first-folder
+- assertVisible:
+    id: build-id
