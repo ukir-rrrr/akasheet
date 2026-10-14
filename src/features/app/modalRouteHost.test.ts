@@ -11,7 +11,7 @@ describe('ModalRouteHost on fullScreenModal routes', () => {
   it('wraps each modal route entry', () => {
     for (const rel of MODAL_ROUTE_FILES) {
       const src = readFileSync(join(__dirname, '..', '..', '..', rel), 'utf8');
-      expect(src).toContain('ModalRouteHost');
+      expect(src).toContain('<ModalRouteHost>');
     }
   });
 });
