@@ -24,8 +24,20 @@ function dataUriBytes(uri: string): Uint8Array<ArrayBuffer> {
   }
 }
 
+function bytesToDataUri(bytes: Uint8Array, mime: string): string {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return `data:${mime};base64,${btoa(bin)}`;
+}
+
 export const platformBackend: MediaBackend = {
   encodeJpeg: (uri, maxSide, quality) => encodeJpeg(uri, maxSide, quality, true),
+  async stageImport(bytes, mime) {
+    return bytesToDataUri(bytes, mime);
+  },
+  async discardStage(_uri) {
+    // data URIs need no cleanup
+  },
   readBytes: async (uri) => dataUriBytes(uri),
   sha256: async (bytes) => toHex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes)),
   assertCapacity(bytes) {

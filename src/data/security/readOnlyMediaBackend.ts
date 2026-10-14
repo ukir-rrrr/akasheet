@@ -58,6 +58,8 @@ async function storedIsEncrypted(inner: MediaBackend, storedUri: string): Promis
 export function createReadOnlyMediaBackend(inner: MediaBackend): MediaBackend {
   return {
     encodeJpeg: (...args) => inner.encodeJpeg(...args),
+    stageImport: (...args) => inner.stageImport(...args),
+    discardStage: (...args) => inner.discardStage(...args),
     sha256: (...args) => inner.sha256(...args),
     assertCapacity: inner.assertCapacity?.bind(inner),
     keys: () => inner.keys(),

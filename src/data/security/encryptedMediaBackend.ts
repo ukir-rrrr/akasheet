@@ -25,6 +25,8 @@ export async function purgeNativeDecryptCache(mediaKey: string): Promise<void> {
 export function createEncryptedMediaBackend(inner: MediaBackend, key: CryptoKey): MediaBackend {
   return {
     encodeJpeg: (...args) => inner.encodeJpeg(...args),
+    stageImport: (...args) => inner.stageImport(...args),
+    discardStage: (...args) => inner.discardStage(...args),
     sha256: (...args) => inner.sha256(...args),
     assertCapacity: inner.assertCapacity?.bind(inner),
 

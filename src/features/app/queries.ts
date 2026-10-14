@@ -12,6 +12,7 @@ import {
   invalidateAfterFolderCreate,
   invalidateAfterFolderDelete,
   invalidateAfterFolderRename,
+  invalidateAfterImport,
   invalidateAfterReview,
 } from './queryInvalidation';
 
@@ -91,5 +92,6 @@ export function useQueryInvalidation() {
       (folderId: string, cardIds: string[]) => invalidateAfterCardsDelete(qc, folderId, cardIds),
       [qc],
     ),
+    afterImport: useCallback(() => invalidateAfterImport(qc), [qc]),
   };
 }

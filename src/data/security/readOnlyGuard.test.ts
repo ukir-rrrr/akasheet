@@ -8,6 +8,7 @@ describe('readOnlyGuard', () => {
       list: async () => [],
       get: async () => null,
       create: async () => ({ id: 'x', name: 'n', color: 'ai' as const }),
+      ensurePath: async () => 'x',
       rename: async () => undefined,
       remove: async () => undefined,
     };
@@ -19,6 +20,7 @@ describe('readOnlyGuard', () => {
       list: async () => [],
       get: async () => null,
       create: async () => ({ id: 'x', name: 'n', color: 'ai' as const }),
+      ensurePath: async () => 'x',
       rename: async () => undefined,
       remove: async () => undefined,
     };
@@ -33,6 +35,7 @@ describe('readOnlyGuard', () => {
     const cards = guardCardsWhenReadOnly(
       {
         create: async () => ({ cardId: 'c', mediaId: 'm', reusedMedia: false }),
+        existingExternalIds: async () => new Set(),
         listByFolder: async () => [],
         get: async () => null,
         remove: async () => undefined,

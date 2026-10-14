@@ -26,6 +26,14 @@ function fakeBackend(sources: Record<string, string>) {
   const files = new Map<string, Uint8Array<ArrayBuffer>>();
   let quota = Infinity;
   const backend: MediaBackend = {
+    async stageImport(bytes: Uint8Array<ArrayBuffer>) {
+      const uri = `stage://${blobs.size}`;
+      blobs.set(uri, bytes);
+      return uri;
+    },
+    async discardStage(uri) {
+      blobs.delete(uri);
+    },
     async encodeJpeg(uri, maxSide) {
       const src = blobs.get(uri);
       if (!src) throw new Error(`no source ${uri}`);

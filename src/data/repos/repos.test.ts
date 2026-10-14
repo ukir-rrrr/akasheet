@@ -16,6 +16,7 @@ import { createFolderRepo } from './folderRepo';
 import { createMediaRepo } from './mediaRepo';
 import { createMetaRepo } from './metaRepo';
 import { createReviewRepo } from './reviewRepo';
+import { IMPORTED_ALGORITHM } from '@/import/types';
 
 const TZ = 'Asia/Tokyo';
 const T0 = Date.parse('2026-10-11T13:00:00+09:00');
@@ -510,6 +511,74 @@ describe('reviewRepo', () => {
     expect(await reviews.replay(cardId)).toEqual(await reviews.state(cardId));
     await expect(reviews.replay('missing')).rejects.toBeInstanceOf(ValidationError);
     await expect(reviews.state('missing')).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('ensurePath creates nested folders and external_id dedupes imports', async () => {
+    const { folders, cards, reviews, db } = await setup();
+    await folders.create('親');
+    const leaf = await folders.ensurePath(['親', '子']);
+    expect(await folders.ensurePath(['親', '子'])).toBe(leaf);
+    expect(await cards.existingExternalIds('import:csv', [])).toEqual(new Set());
+    const parent = await db.get<{ id: string }>(
+      'SELECT id FROM folders WHERE deleted_at IS NULL AND parent_id IS NULL',
+    );
+    const child = await db.get<{ parent_id: string | null }>('SELECT parent_id FROM folders WHERE id = ?', [
+      leaf,
+    ]);
+    expect(child?.parent_id).toBe(parent?.id);
+
+    const imported = {
+      folderId: leaf,
+      media: media('c'.repeat(64)),
+      masks: [rect],
+      source: 'import:csv' as const,
+      externalId: 'row:9',
+      importedReview: {
+        state: {
+          phase: 'review' as const,
+          dueAt: T0 + 86_400_000,
+          intervalDays: 2,
+          ease: 2.4,
+          reps: 2,
+          lapses: 0,
+          lastReviewedAt: T0,
+        },
+        logs: [
+          {
+            reviewedAt: T0,
+            rating: 3 as const,
+            prev: {
+              phase: 'new' as const,
+              dueAt: T0,
+              intervalDays: 0,
+              ease: 2.5,
+              reps: 0,
+              lapses: 0,
+              lastReviewedAt: null,
+            },
+            next: {
+              phase: 'learning' as const,
+              dueAt: T0 + 600_000,
+              intervalDays: 0,
+              ease: 2.5,
+              reps: 1,
+              lapses: 0,
+              lastReviewedAt: T0,
+            },
+          },
+        ],
+      },
+    };
+    await cards.create(imported);
+    const alg = await db.get<{ algorithm: string }>(
+      'SELECT algorithm FROM review_states WHERE card_id IS NOT NULL',
+    );
+    expect(alg?.algorithm).toBe(IMPORTED_ALGORITHM);
+    expect(await cards.existingExternalIds('import:csv', ['row:9', 'row:10'])).toEqual(new Set(['row:9']));
+    await expect(cards.create(imported)).rejects.toThrow('duplicate_import');
+    expect((await db.get<{ n: number }>('SELECT COUNT(*) AS n FROM review_logs'))?.n).toBe(1);
+    const row = await db.get<{ id: string }>('SELECT id FROM cards LIMIT 1');
+    expect(await reviews.state(row!.id)).toMatchObject({ reps: 2, phase: 'review' });
   });
 
   it('reports the next due time after today', async () => {

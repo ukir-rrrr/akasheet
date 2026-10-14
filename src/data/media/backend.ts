@@ -19,6 +19,19 @@ function listFiles(dir: Directory, prefix: string, out: string[]) {
 
 export const platformBackend: MediaBackend = {
   encodeJpeg: (uri, maxSide, quality) => encodeJpeg(uri, maxSide, quality, false),
+  async stageImport(bytes, mime) {
+    const dir = new Directory(Paths.cache, 'import');
+    if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
+    const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+    const rnd = await Crypto.getRandomBytes(8);
+    const f = new File(dir, `stg-${toHex(rnd.buffer as ArrayBuffer)}.${ext}`);
+    f.write(new Uint8Array(bytes));
+    return f.uri;
+  },
+  async discardStage(uri) {
+    const f = new File(uri);
+    if (f.exists) f.delete();
+  },
   readBytes: (uri) => new File(uri).bytes(),
   sha256: async (bytes) => toHex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes)),
   async putIfAbsent(key, srcUri) {

@@ -2,15 +2,17 @@ import { decodeGeometry, encodeGeometry, isValidGeometry } from '@/domain/mask/c
 import { geometryBBox } from '@/domain/mask/geometry';
 import { readingOrder } from '@/domain/mask/order';
 import type { Mask, MaskDraw, MaskGeometry, Size } from '@/domain/mask/types';
-import type { Phase } from '@/domain/scheduler/types';
+import type { Phase, ReviewState } from '@/domain/scheduler/types';
 import { ValidationError } from '@/shared/errors';
+
+import type { ImportReviewLog } from '@/import/types';
 
 import type { SqlDriver } from '../db/driver';
 import { chunk, SQLITE_IN_CHUNK } from '../db/sql';
 import { assertSafeMediaKey, type NewMedia } from '../media/types';
 import type { RepoContext } from './context';
 import { upsertMedia } from './mediaRepo';
-import { insertInitialState } from './reviewRepo';
+import { insertImportedReview, insertInitialState } from './reviewRepo';
 
 export type CardSource = 'camera' | 'library' | 'sample' | 'import:anki' | 'import:csv';
 
@@ -20,6 +22,8 @@ export type NewCard = {
   masks: MaskGeometry[];
   source: CardSource;
   title?: string | null;
+  externalId?: string | null;
+  importedReview?: { state: ReviewState; logs: ImportReviewLog[] };
 };
 
 export type CardMedia = { path: string; thumbPath: string; width: number; height: number };
@@ -171,26 +175,58 @@ export function createCardRepo(ctx: RepoContext) {
       const now = clock.now();
       return db.transaction(async (tx) => {
         await liveFolder(tx, input.folderId);
+        if (input.externalId) {
+          const dup = await tx.get<{ id: string }>(
+            `SELECT id FROM cards WHERE source = ? AND external_id = ? AND deleted_at IS NULL`,
+            [input.source, input.externalId],
+          );
+          if (dup) throw new ValidationError('duplicate_import');
+        }
         const { mediaId, reused } = await upsertMedia(tx, ctx, input.media, now);
         const cardId = ctx.newId();
         await tx.run(
-          `INSERT INTO cards (id, folder_id, media_id, title, source, created_device_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO cards (id, folder_id, media_id, title, source, external_id, created_device_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             cardId,
             input.folderId,
             mediaId,
             input.title != null ? await ctx.fields.seal(input.title) : null,
             input.source,
+            input.externalId ?? null,
             ctx.deviceId,
             now,
             now,
           ],
         );
         await insertMasks(tx, ctx, cardId, input.masks, input.media, now);
-        await insertInitialState(tx, ctx.scheduler, cardId, now);
+        if (input.importedReview) {
+          await insertImportedReview(
+            tx,
+            ctx,
+            cardId,
+            input.importedReview.state,
+            input.importedReview.logs,
+            now,
+          );
+        } else {
+          await insertInitialState(tx, ctx.scheduler, cardId, now);
+        }
         return { cardId, mediaId, reusedMedia: reused };
       });
+    },
+
+    async existingExternalIds(source: CardSource, externalIds: readonly string[]): Promise<Set<string>> {
+      if (externalIds.length === 0) return new Set();
+      const found = new Set<string>();
+      for (const part of chunk(externalIds, SQLITE_IN_CHUNK)) {
+        const rows = await db.all<{ external_id: string }>(
+          `SELECT external_id FROM cards WHERE source = ? AND deleted_at IS NULL AND external_id IN (${placeholders(part)})`,
+          [source, ...part],
+        );
+        for (const r of rows) found.add(r.external_id);
+      }
+      return found;
     },
 
     async listByFolder(folderId: string): Promise<CardSummary[]> {

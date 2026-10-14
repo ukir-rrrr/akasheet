@@ -16,6 +16,12 @@ const emptyMedia = {
   async encodeJpeg(uri: string, maxSide: number) {
     return { uri, width: maxSide, height: maxSide };
   },
+  async stageImport(bytes: Uint8Array) {
+    return `stg://${bytes.length}`;
+  },
+  async discardStage() {
+    return undefined;
+  },
   readBytes: async () => new Uint8Array(),
   sha256: async () => '',
   putIfAbsent: async () => false,
