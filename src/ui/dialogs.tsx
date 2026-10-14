@@ -1,4 +1,13 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+  type ReactNode,
+} from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -176,7 +185,7 @@ function PromptView({ req, onClose }: { req: PromptRequest; onClose: (v: string 
   const { c } = useTheme();
   const [value, setValue] = useState(req.initial ?? '');
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<ComponentRef<typeof TextInput>>(null);
   const submit = () => {
     const err = req.validate?.(value) ?? null;
     if (err) {
