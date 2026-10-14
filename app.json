@@ -59,7 +59,17 @@
         }
       ],
       "expo-asset",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsFileWithMaxCount": 1
+          },
+          "androidIntentFilters": ["*/*"],
+          "androidMultiIntentFilters": ["*/*"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

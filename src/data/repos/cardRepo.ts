@@ -10,7 +10,7 @@ import { chunk, SQLITE_IN_CHUNK } from '../db/sql';
 import { assertSafeMediaKey, type NewMedia } from '../media/types';
 import type { RepoContext } from './context';
 import { upsertMedia } from './mediaRepo';
-import { insertInitialState } from './reviewRepo';
+import { insertImportedState, insertInitialState, type ImportedReviewState } from './reviewRepo';
 
 export type CardSource = 'camera' | 'library' | 'sample' | 'import:anki' | 'import:csv';
 
@@ -20,7 +20,13 @@ export type NewCard = {
   masks: MaskGeometry[];
   source: CardSource;
   title?: string | null;
+  externalId?: string;
+  importedReview?: ImportedReviewState;
 };
+
+export type CreateCardResult =
+  | { cardId: string; mediaId: string; reusedMedia: boolean; created: true }
+  | { cardId: string; created: false; reason: 'duplicate' };
 
 export type CardMedia = { path: string; thumbPath: string; width: number; height: number };
 export type CardListMedia = { thumbPath: string; width: number; height: number };
@@ -166,30 +172,50 @@ export function createCardRepo(ctx: RepoContext) {
 
   return {
     /** Saves media (reused by sha256) + card + masks + initial review state atomically. */
-    async create(input: NewCard): Promise<{ cardId: string; mediaId: string; reusedMedia: boolean }> {
+    async create(input: NewCard): Promise<CreateCardResult> {
       validateInput(input);
       const now = clock.now();
       return db.transaction(async (tx) => {
+        if (input.externalId) {
+          const dup = await tx.get<{ id: string }>(
+            `SELECT id FROM cards WHERE source = ? AND external_id = ? AND deleted_at IS NULL`,
+            [input.source, input.externalId],
+          );
+          if (dup) return { cardId: dup.id, created: false, reason: 'duplicate' };
+        }
         await liveFolder(tx, input.folderId);
         const { mediaId, reused } = await upsertMedia(tx, ctx, input.media, now);
         const cardId = ctx.newId();
         await tx.run(
-          `INSERT INTO cards (id, folder_id, media_id, title, source, created_device_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO cards (id, folder_id, media_id, title, source, external_id, created_device_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             cardId,
             input.folderId,
             mediaId,
             input.title != null ? await ctx.fields.seal(input.title) : null,
             input.source,
+            input.externalId ?? null,
             ctx.deviceId,
             now,
             now,
           ],
         );
         await insertMasks(tx, ctx, cardId, input.masks, input.media, now);
-        await insertInitialState(tx, ctx.scheduler, cardId, now);
-        return { cardId, mediaId, reusedMedia: reused };
+        if (input.importedReview) {
+          await insertImportedState(
+            tx,
+            ctx.scheduler,
+            ctx,
+            cardId,
+            input.importedReview,
+            input.masks.length,
+            now,
+          );
+        } else {
+          await insertInitialState(tx, ctx.scheduler, cardId, now);
+        }
+        return { cardId, mediaId, reusedMedia: reused, created: true };
       });
     },
 

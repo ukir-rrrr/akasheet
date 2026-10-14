@@ -129,6 +129,15 @@ describe('migrations', () => {
 });
 
 describe('folderRepo', () => {
+  it('ensurePath creates nested folders for deck paths', async () => {
+    const { folders, db } = await setup();
+    const leaf = await folders.ensurePath('親::子');
+    const count = await db.get<{ n: number }>('SELECT COUNT(*) AS n FROM folders WHERE deleted_at IS NULL');
+    expect(count?.n).toBe(2);
+    const again = await folders.ensurePath('親::子');
+    expect(again).toBe(leaf);
+  });
+
   it('creates, lists with counts, renames and validates names', async () => {
     const { folders, cards, end } = await setup();
     const a = await folders.create('  日本史 ');
@@ -171,6 +180,27 @@ describe('folderRepo', () => {
 });
 
 describe('cardRepo', () => {
+  it('skips duplicate external_id per source', async () => {
+    const { folders, cards } = await setup();
+    const f = await folders.create('x');
+    const first = await cards.create({
+      folderId: f.id,
+      media: media(),
+      masks: [rect],
+      source: 'import:anki',
+      externalId: 'anki:card:1',
+    });
+    expect(first.created).toBe(true);
+    const dup = await cards.create({
+      folderId: f.id,
+      media: media('b'.repeat(64)),
+      masks: [rect],
+      source: 'import:anki',
+      externalId: 'anki:card:1',
+    });
+    expect(dup).toEqual({ cardId: first.cardId, created: false, reason: 'duplicate' });
+  });
+
   it('saves media+card+masks+state with reading-order ords and reuses media by sha', async () => {
     const { folders, cards, reviews } = await setup();
     const f = await folders.create('日本史');
@@ -187,8 +217,11 @@ describe('cardRepo', () => {
     expect(detail?.media).toMatchObject({ width: 1536, height: 2048 });
     expect((await reviews.state(first.cardId)).phase).toBe('new');
     const second = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
-    expect(second.reusedMedia).toBe(true);
-    expect(second.mediaId).toBe(first.mediaId);
+    expect(second.created).toBe(true);
+    if (second.created) {
+      expect(second.reusedMedia).toBe(true);
+      expect(second.mediaId).toBe(first.created ? first.mediaId : '');
+    }
     const list = await cards.listByFolder(f.id);
     expect(list).toHaveLength(2);
     const listed = list.find((c) => c.id === first.cardId);
@@ -336,7 +369,7 @@ describe('mediaRepo', () => {
     const live = await mediaRepo.livePaths();
     expect(live.size).toBe(2);
     expect(live.has(media().path)).toBe(true);
-    expect(kept.mediaId).not.toBe(gone.mediaId);
+    if (kept.created && gone.created) expect(kept.mediaId).not.toBe(gone.mediaId);
   });
 
   it('revives a purged media row when the same image is saved again', async () => {
@@ -348,7 +381,10 @@ describe('mediaRepo', () => {
     await mediaRepo.purgeUnreferenced(clock.now());
     expect((await mediaRepo.livePaths()).size).toBe(0);
     const again = await cards.create({ folderId: f.id, media: media(), masks: [rect], source: 'library' });
-    expect(again).toMatchObject({ mediaId: first.mediaId, reusedMedia: true });
+    expect(again.created).toBe(true);
+    if (again.created && first.created) {
+      expect(again).toMatchObject({ mediaId: first.mediaId, reusedMedia: true });
+    }
     expect((await mediaRepo.livePaths()).size).toBe(2);
   });
 });

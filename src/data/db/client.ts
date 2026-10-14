@@ -28,7 +28,9 @@ import {
   guardFoldersWhenReadOnly,
   guardReviewsWhenReadOnly,
 } from '../security/readOnlyGuard';
+import { commitImportBundle, type ImportCommitResult } from '../importCards';
 import { runMaintenance, saveCard, type SaveCardInput } from '../services';
+import type { ParsedImportBundle } from '@/import/types';
 import { createExpoDriver } from './expoDriver';
 import { migrate } from './migrate';
 
@@ -45,6 +47,7 @@ export type AppData = {
   meta: MetaRepo;
   images: Pick<MediaStore, 'prepareImage' | 'resolveMediaUri'>;
   saveCard(input: SaveCardInput): Promise<string>;
+  commitImport(bundle: ParsedImportBundle): Promise<ImportCommitResult>;
   runMaintenance(): Promise<{ purged: number; removedFiles: number }>;
 };
 
@@ -135,6 +138,12 @@ export async function openAppData(): Promise<AppData> {
         );
       }
       return saveCard({ cards, store }, input);
+    },
+    commitImport: (bundle) => {
+      if (!mutate) {
+        throw new DataProtectionError('この端末ではデータ保護キーを利用できないため、インポートできません。');
+      }
+      return commitImportBundle({ cards, folders, store }, bundle);
     },
     runMaintenance: () => {
       if (!mutate) return Promise.resolve({ purged: 0, removedFiles: 0 });

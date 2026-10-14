@@ -23,14 +23,15 @@ export async function saveCard(
 ): Promise<string> {
   const media = await deps.store.persistImage(input.image);
   try {
-    const { cardId } = await deps.cards.create({
+    const result = await deps.cards.create({
       folderId: input.folderId,
       media,
       masks: input.masks,
       source: input.source,
       title: input.title,
     });
-    return cardId;
+    if (!result.created) throw new Error('duplicate card');
+    return result.cardId;
   } catch (e) {
     await deps.store.discardPersisted(media).catch(() => undefined);
     throw e;

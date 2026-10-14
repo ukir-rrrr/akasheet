@@ -88,6 +88,39 @@ export function createFolderRepo(ctx: RepoContext) {
       });
     },
 
+    /** Ensures nested folders for an Anki deck path (`親::子`). Returns the leaf folder id. */
+    async ensurePath(deckPath: string): Promise<string> {
+      const parts = deckPath
+        .split('::')
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+      if (parts.length === 0) throw new ValidationError('フォルダ名が空です');
+      let parentId: string | null = null;
+      for (const name of parts) {
+        const clean = validateFolderName(name);
+        const sealed = await ctx.fields.seal(clean);
+        const existing: { id: string } | null = await db.get<{ id: string }>(
+          `SELECT id FROM folders WHERE name = ? AND parent_id IS ? AND deleted_at IS NULL`,
+          [sealed, parentId],
+        );
+        if (existing) {
+          parentId = existing.id;
+          continue;
+        }
+        const created = await this.create(clean);
+        if (parentId) {
+          const now = clock.now();
+          await db.run('UPDATE folders SET parent_id = ?, updated_at = ? WHERE id = ?', [
+            parentId,
+            now,
+            created.id,
+          ]);
+        }
+        parentId = created.id;
+      }
+      return parentId!;
+    },
+
     async rename(id: string, name: string): Promise<void> {
       const clean = validateFolderName(name);
       const r = await db.run(

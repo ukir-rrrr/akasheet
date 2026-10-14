@@ -12,7 +12,7 @@ async function deny(): Promise<never> {
 
 export function guardFoldersWhenReadOnly(repo: FolderRepo, mutate: boolean): FolderRepo {
   if (mutate) return repo;
-  return { ...repo, create: deny, rename: deny, remove: deny };
+  return { ...repo, create: deny, ensurePath: deny, rename: deny, remove: deny };
 }
 
 export function guardCardsWhenReadOnly(repo: CardRepo, mutate: boolean): CardRepo {

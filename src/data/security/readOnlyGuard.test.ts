@@ -8,6 +8,7 @@ describe('readOnlyGuard', () => {
       list: async () => [],
       get: async () => null,
       create: async () => ({ id: 'x', name: 'n', color: 'ai' as const }),
+      ensurePath: async () => 'x',
       rename: async () => undefined,
       remove: async () => undefined,
     };
@@ -19,6 +20,7 @@ describe('readOnlyGuard', () => {
       list: async () => [],
       get: async () => null,
       create: async () => ({ id: 'x', name: 'n', color: 'ai' as const }),
+      ensurePath: async () => 'x',
       rename: async () => undefined,
       remove: async () => undefined,
     };
@@ -32,7 +34,7 @@ describe('readOnlyGuard', () => {
   it('blocks card and review writes in read-only mode', async () => {
     const cards = guardCardsWhenReadOnly(
       {
-        create: async () => ({ cardId: 'c', mediaId: 'm', reusedMedia: false }),
+        create: async () => ({ cardId: 'c', mediaId: 'm', reusedMedia: false, created: true as const }),
         listByFolder: async () => [],
         get: async () => null,
         remove: async () => undefined,

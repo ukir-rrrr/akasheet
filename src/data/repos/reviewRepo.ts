@@ -58,6 +58,76 @@ export async function insertInitialState(tx: SqlDriver, scheduler: Scheduler, ca
   );
 }
 
+export type ImportedReviewState = {
+  phase: Phase;
+  dueAt: number;
+  intervalDays: number;
+  ease: number;
+  reps: number;
+  lapses: number;
+  lastReviewedAt: number | null;
+};
+
+/** Restores imported scheduling and records a single audit log row (`algorithm = imported`). */
+export async function insertImportedState(
+  tx: SqlDriver,
+  scheduler: Scheduler,
+  ctx: RepoContext,
+  cardId: string,
+  imported: ImportedReviewState,
+  maskCount: number,
+  now: number,
+) {
+  const initial = scheduler.initial(now);
+  await tx.run(
+    `INSERT INTO review_states (card_id, algorithm, phase, due_at, interval_days, ease, reps, lapses, last_reviewed_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      cardId,
+      'imported',
+      imported.phase,
+      imported.dueAt,
+      imported.intervalDays,
+      imported.ease,
+      imported.reps,
+      imported.lapses,
+      imported.lastReviewedAt,
+      now,
+    ],
+  );
+  const logId = ctx.newId();
+  await tx.run(
+    `INSERT INTO review_logs (id, card_id, reviewed_at, time_zone, rating, algorithm, duration_ms, revealed_count, mask_count,
+       prev_phase, prev_interval, prev_ease, prev_reps, prev_lapses, prev_due_at,
+       new_phase, new_interval, new_ease, new_reps, new_lapses, new_due_at, device_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      logId,
+      cardId,
+      now,
+      ctx.timeZone(),
+      3,
+      'imported',
+      null,
+      0,
+      maskCount,
+      initial.phase,
+      initial.intervalDays,
+      initial.ease,
+      initial.reps,
+      initial.lapses,
+      initial.dueAt,
+      imported.phase,
+      imported.intervalDays,
+      imported.ease,
+      imported.reps,
+      imported.lapses,
+      imported.dueAt,
+      ctx.deviceId,
+    ],
+  );
+}
+
 async function writeState(tx: SqlDriver, scheduler: Scheduler, cardId: string, s: ReviewState, now: number) {
   await tx.run(`UPDATE review_states SET algorithm = ?, ${STATE_SET}, updated_at = ? WHERE card_id = ?`, [
     scheduler.id,
