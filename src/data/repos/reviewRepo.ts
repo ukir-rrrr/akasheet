@@ -1,6 +1,8 @@
 import type { QueueItem } from '@/domain/review/session';
 import { reviewRng } from '@/domain/scheduler/rng';
 import type { Phase, Rating, ReviewState, Scheduler } from '@/domain/scheduler/types';
+import type { ImportReviewLog } from '@/import/types';
+import { IMPORTED_ALGORITHM } from '@/import/types';
 import { ValidationError } from '@/shared/errors';
 
 import { chunk, SQLITE_IN_CHUNK } from '../db/sql';
@@ -56,6 +58,56 @@ export async function insertInitialState(tx: SqlDriver, scheduler: Scheduler, ca
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [cardId, scheduler.id, ...stateParams(s), now],
   );
+}
+
+/** Restores Anki / CSV history: final state on review_states plus `algorithm=imported` logs. */
+export async function insertImportedReview(
+  tx: SqlDriver,
+  ctx: RepoContext,
+  cardId: string,
+  state: ReviewState,
+  logs: ImportReviewLog[],
+  now: number,
+) {
+  await tx.run(
+    `INSERT INTO review_states (card_id, algorithm, phase, due_at, interval_days, ease, reps, lapses, last_reviewed_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [cardId, IMPORTED_ALGORITHM, ...stateParams(state), now],
+  );
+  const tz = ctx.timeZone();
+  for (const l of logs) {
+    const logId = ctx.newId();
+    await tx.run(
+      `INSERT INTO review_logs (id, card_id, reviewed_at, time_zone, rating, algorithm, duration_ms, revealed_count, mask_count,
+         prev_phase, prev_interval, prev_ease, prev_reps, prev_lapses, prev_due_at,
+         new_phase, new_interval, new_ease, new_reps, new_lapses, new_due_at, device_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        logId,
+        cardId,
+        l.reviewedAt,
+        tz,
+        l.rating,
+        IMPORTED_ALGORITHM,
+        null,
+        0,
+        0,
+        l.prev.phase,
+        l.prev.intervalDays,
+        l.prev.ease,
+        l.prev.reps,
+        l.prev.lapses,
+        l.prev.dueAt,
+        l.next.phase,
+        l.next.intervalDays,
+        l.next.ease,
+        l.next.reps,
+        l.next.lapses,
+        l.next.dueAt,
+        ctx.deviceId,
+      ],
+    );
+  }
 }
 
 async function writeState(tx: SqlDriver, scheduler: Scheduler, cardId: string, s: ReviewState, now: number) {

@@ -28,6 +28,7 @@ playwright-report/
 blob-report/
 playwright/.cache/
 e2e-artifacts/
+e2e/fixtures/generated/
 *.webm
 *.mp4
 *.mov

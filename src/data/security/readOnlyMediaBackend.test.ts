@@ -131,6 +131,14 @@ jest.mock('react-native', () => ({ Platform: platformOs }));
 function memoryBackend() {
   const store = new Map<string, string>();
   const backend: MediaBackend = {
+    async stageImport(bytes) {
+      const uri = `stg://${store.size}`;
+      store.set(uri, Buffer.from(bytes).toString('base64'));
+      return uri;
+    },
+    async discardStage(uri) {
+      store.delete(uri);
+    },
     async encodeJpeg(uri, maxSide) {
       return { uri, width: maxSide, height: maxSide };
     },
@@ -197,6 +205,12 @@ describe('createReadOnlyMediaBackend', () => {
     const { path } = mediaPaths('e'.repeat(64));
     const fileUri = 'file://doc/' + path;
     const inner: MediaBackend = {
+      async stageImport(bytes) {
+        return `stg://${bytes.length}`;
+      },
+      async discardStage() {
+        return undefined;
+      },
       async encodeJpeg(uri, maxSide) {
         return { uri, width: maxSide, height: maxSide };
       },

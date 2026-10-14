@@ -15,6 +15,7 @@ import {
   folderListToastBottom,
 } from '@/ui/Dock';
 import { formatCount, formatHeaderDate, formatRelativeDay, formatShortDate } from '@/ui/format';
+import { useImportFlow } from '@/features/import/useImportFlow';
 import {
   AppText,
   Badge,
@@ -23,6 +24,7 @@ import {
   ErrorState,
   FolderTab,
   Icon,
+  IconButton,
   PressableScale,
   Skeleton,
 } from '@/ui/primitives';
@@ -41,6 +43,7 @@ export function FolderListScreen() {
   const folders = useFolders();
   const nextDue = useNextDue(null);
   const actions = useFolderActions();
+  const startImport = useImportFlow();
   const toast = useFlash();
 
   const list = folders.data ?? [];
@@ -152,10 +155,21 @@ export function FolderListScreen() {
         ]}
       >
         <View style={styles.headerRow}>
-          <AppText variant="button">akasheet</AppText>
+          <AppText variant="button" style={{ flex: 1 }}>
+            akasheet
+          </AppText>
           <AppText variant="sub" color={c.ink3}>
             {formatHeaderDate(today.now, today.tz)}
           </AppText>
+          <IconButton
+            icon="ellipsis-horizontal"
+            label="その他のメニュー"
+            onPress={async () => {
+              const choice = await actions.folderListMenu();
+              if (choice === 'import') await startImport();
+            }}
+            testID="folder-list-menu"
+          />
         </View>
         <AppText variant="title" accessibilityRole="header" style={{ marginBottom: space[16] }}>
           フォルダ

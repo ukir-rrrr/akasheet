@@ -49,6 +49,14 @@ jest.mock('expo-sqlite/kv-store', () => ({
 function memoryBackend() {
   const store = new Map<string, string>();
   const backend: MediaBackend = {
+    async stageImport(bytes) {
+      const uri = `stg://${store.size}`;
+      store.set(uri, Buffer.from(bytes).toString('base64'));
+      return uri;
+    },
+    async discardStage(uri) {
+      store.delete(uri);
+    },
     async encodeJpeg(uri, maxSide) {
       return { uri, width: maxSide, height: maxSide };
     },

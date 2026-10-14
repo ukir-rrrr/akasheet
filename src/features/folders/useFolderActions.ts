@@ -131,5 +131,28 @@ export function useFolderActions() {
     [dialogs, startCard],
   );
 
-  return { createFolder, renameFolder, deleteFolder, folderMenu, startCard, chooseSourceAndStart };
+  const folderListMenu = useCallback(async (): Promise<'import' | null> => {
+    const choice = await dialogs.sheet({
+      title: 'その他',
+      actions: [
+        {
+          value: 'import' as const,
+          label: 'Anki / CSV を取り込む',
+          icon: 'download-outline',
+          testID: 'menu-import',
+        },
+      ],
+    });
+    return choice;
+  }, [dialogs]);
+
+  return {
+    createFolder,
+    renameFolder,
+    deleteFolder,
+    folderMenu,
+    folderListMenu,
+    startCard,
+    chooseSourceAndStart,
+  };
 }

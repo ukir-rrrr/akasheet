@@ -71,21 +71,75 @@ export function createFolderRepo(ctx: RepoContext) {
       return r ? { id: r.id, name: await ctx.fields.open(r.name), color: toColor(r.color) } : null;
     },
 
-    async create(name: string, color?: FolderColor): Promise<Folder> {
+    async create(name: string, color?: FolderColor, parentId?: string | null): Promise<Folder> {
       const clean = validateFolderName(name);
       const id = ctx.newId();
       const now = clock.now();
       return db.transaction(async (tx) => {
+        if (parentId) {
+          const parent = await tx.get<{ id: string }>(
+            'SELECT id FROM folders WHERE id = ? AND deleted_at IS NULL',
+            [parentId],
+          );
+          if (!parent) throw new ValidationError('親フォルダが見つかりません');
+        }
         const count = await tx.get<{ n: number; mx: number | null }>(
           'SELECT COUNT(*) AS n, MAX(sort_order) AS mx FROM folders WHERE deleted_at IS NULL',
         );
         const chosen = color ?? FOLDER_COLORS[(count?.n ?? 0) % FOLDER_COLORS.length];
         await tx.run(
-          'INSERT INTO folders (id, name, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-          [id, await ctx.fields.seal(clean), chosen, (count?.mx ?? 0) + 1, now, now],
+          'INSERT INTO folders (id, parent_id, name, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [id, parentId ?? null, await ctx.fields.seal(clean), chosen, (count?.mx ?? 0) + 1, now, now],
         );
         return { id, name: clean, color: chosen };
       });
+    },
+
+    /** Creates missing segments; returns the leaf folder id. */
+    async findByName(parentId: string | null, name: string): Promise<string | null> {
+      const clean = validateFolderName(name);
+      const siblings = await db.all<{ id: string; name: string }>(
+        'SELECT id, name FROM folders WHERE deleted_at IS NULL AND parent_id IS ?',
+        [parentId],
+      );
+      for (const s of siblings) {
+        if ((await ctx.fields.open(s.name)) === clean) return s.id;
+      }
+      return null;
+    },
+
+    async ensurePath(path: string[]): Promise<string> {
+      const segments = path.map((s) => s.trim()).filter(Boolean);
+      if (segments.length === 0) {
+        const existing = await this.findByName(null, 'Imported');
+        if (existing) return existing;
+        return (await this.create('Imported')).id;
+      }
+      let parentId: string | null = null;
+      let leafId = '';
+      for (const segment of segments) {
+        const clean = validateFolderName(segment);
+        const siblings: { id: string; name: string }[] = await db.all<{ id: string; name: string }>(
+          'SELECT id, name FROM folders WHERE deleted_at IS NULL AND parent_id IS ?',
+          [parentId],
+        );
+        let found: string | null = null;
+        for (const s of siblings) {
+          if ((await ctx.fields.open(s.name)) === clean) {
+            found = s.id;
+            break;
+          }
+        }
+        if (found) {
+          leafId = found;
+          parentId = found;
+          continue;
+        }
+        const created = await this.create(clean, undefined, parentId);
+        leafId = created.id;
+        parentId = created.id;
+      }
+      return leafId;
     },
 
     async rename(id: string, name: string): Promise<void> {

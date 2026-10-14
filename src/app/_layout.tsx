@@ -25,6 +25,7 @@ export default function RootLayout() {
               <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
                 <Stack.Screen name="index" />
                 <Stack.Screen name="folders/[folderId]" />
+                <Stack.Screen name="import/preview" options={{ presentation: 'modal' }} />
                 <Stack.Screen
                   name="cards/new"
                   options={{ presentation: 'fullScreenModal', gestureEnabled: false }}

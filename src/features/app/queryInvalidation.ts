@@ -90,3 +90,12 @@ export async function invalidateAfterCardsDelete(qc: QueryClient, folderId: stri
     ...cardIds.map((id) => qc.invalidateQueries({ queryKey: keys.card(id) })),
   ]);
 }
+
+/** Bulk import: folders and all card lists may change. */
+export async function invalidateAfterImport(qc: QueryClient) {
+  await Promise.all([
+    qc.invalidateQueries({ queryKey: keys.folders }),
+    qc.invalidateQueries({ queryKey: CARD_LIST_ROOT }),
+    qc.invalidateQueries({ queryKey: NEXT_DUE_ROOT }),
+  ]);
+}

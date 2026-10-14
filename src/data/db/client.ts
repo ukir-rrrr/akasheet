@@ -28,7 +28,9 @@ import {
   guardFoldersWhenReadOnly,
   guardReviewsWhenReadOnly,
 } from '../security/readOnlyGuard';
+import { applyImportPreview } from '../import/applyImport';
 import { runMaintenance, saveCard, type SaveCardInput } from '../services';
+import type { ImportApplyResult, ImportPreview } from '@/import/types';
 import { createExpoDriver } from './expoDriver';
 import { migrate } from './migrate';
 
@@ -45,6 +47,7 @@ export type AppData = {
   meta: MetaRepo;
   images: Pick<MediaStore, 'prepareImage' | 'resolveMediaUri'>;
   saveCard(input: SaveCardInput): Promise<string>;
+  applyImport(preview: ImportPreview): Promise<ImportApplyResult>;
   runMaintenance(): Promise<{ purged: number; removedFiles: number }>;
 };
 
@@ -135,6 +138,14 @@ export async function openAppData(): Promise<AppData> {
         );
       }
       return saveCard({ cards, store }, input);
+    },
+    applyImport: (preview) => {
+      if (!mutate) {
+        throw new DataProtectionError(
+          'この端末ではデータ保護キーを利用できないため、取り込みを実行できません。',
+        );
+      }
+      return applyImportPreview({ folders, cards, store }, preview);
     },
     runMaintenance: () => {
       if (!mutate) return Promise.resolve({ purged: 0, removedFiles: 0 });

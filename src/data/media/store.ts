@@ -16,6 +16,9 @@ import {
 export type MediaBackend = {
   /** Upright (EXIF-baked) JPEG capped at `maxSide`, as a URI the backend can read back. */
   encodeJpeg(uri: string, maxSide: number, quality: number): Promise<PreparedImage>;
+  /** Short-lived URI for import bytes before normalization (JPEG re-encode). */
+  stageImport(bytes: Uint8Array<ArrayBufferLike>, mime: string): Promise<string>;
+  discardStage(uri: string): Promise<void>;
   readBytes(uri: string): Promise<Uint8Array<ArrayBuffer>>;
   sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string>;
   /** Stores `srcUri` under `key` unless it already exists; true when something was written. */
@@ -35,6 +38,17 @@ export function createMediaStore(backend: MediaBackend) {
     /** Normalizes a picked photo (orientation, ≤2048px, JPEG 0.85) into temporary storage. */
     prepareImage(sourceUri: string): Promise<PreparedImage> {
       return backend.encodeJpeg(sourceUri, MAX_LONG_SIDE, JPEG_QUALITY);
+    },
+
+    /** Normalizes arbitrary image bytes (e.g. Anki / CSV zip) into stored media. */
+    async persistImportImage(bytes: Uint8Array, mime: string): Promise<ImportedMedia> {
+      const staged = await backend.stageImport(bytes, mime);
+      try {
+        const prepared = await backend.encodeJpeg(staged, MAX_LONG_SIDE, JPEG_QUALITY);
+        return await this.persistImage(prepared);
+      } finally {
+        await backend.discardStage(staged).catch(() => undefined);
+      }
     },
 
     /** Writes the image and a 512px thumbnail content-addressed by SHA-256. */

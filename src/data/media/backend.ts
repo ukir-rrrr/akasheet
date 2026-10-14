@@ -4,6 +4,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { StorageError } from '@/shared/errors';
 
 import { encodeJpeg } from './encodeJpeg';
+import { discardImportStage, isImportStageUri, readImportStage, stageImportInMemory } from './importStage';
 import type { MediaBackend } from './store';
 import { assertSafeMediaKey, MEDIA_ROOTS, toHex } from './types';
 
@@ -19,7 +20,22 @@ function listFiles(dir: Directory, prefix: string, out: string[]) {
 
 export const platformBackend: MediaBackend = {
   encodeJpeg: (uri, maxSide, quality) => encodeJpeg(uri, maxSide, quality, false),
-  readBytes: (uri) => new File(uri).bytes(),
+  async stageImport(bytes, _mime) {
+    return stageImportInMemory(bytes);
+  },
+  async discardStage(uri) {
+    if (isImportStageUri(uri)) {
+      discardImportStage(uri);
+      return;
+    }
+    const f = new File(uri);
+    if (f.exists) f.delete();
+  },
+  readBytes: (uri) => {
+    const staged = readImportStage(uri);
+    if (staged) return Promise.resolve(staged as Uint8Array<ArrayBuffer>);
+    return new File(uri).bytes();
+  },
   sha256: async (bytes) => toHex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes)),
   async putIfAbsent(key, srcUri) {
     assertSafeMediaKey(key);
