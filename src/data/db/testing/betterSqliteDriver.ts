@@ -1,6 +1,12 @@
 import Database from 'better-sqlite3';
 
 import type { SqlDriver, SqlParam } from '../driver';
+import { isWalCheckpointComplete, type WalCheckpointRow, walCheckpointBusy } from '../walCheckpoint';
+
+function walCheckpointTruncate(raw: Database.Database): boolean {
+  const rows = raw.pragma('wal_checkpoint(TRUNCATE)') as WalCheckpointRow[];
+  return isWalCheckpointComplete(walCheckpointBusy(rows[0]));
+}
 
 /** Test-only driver: runs the production SQL against an in-process SQLite. */
 export function createBetterSqliteDriver(
@@ -10,7 +16,7 @@ export function createBetterSqliteDriver(
   raw.pragma('foreign_keys = ON');
   let chain: Promise<unknown> = Promise.resolve();
 
-  const ops: Omit<SqlDriver, 'transaction'> = {
+  const ops: Omit<SqlDriver, 'transaction' | 'compactFreelist'> = {
     async exec(sql) {
       raw.exec(sql);
     },
@@ -36,12 +42,27 @@ export function createBetterSqliteDriver(
     },
   };
 
-  const tx: SqlDriver = { ...ops, transaction: (fn) => fn(tx) };
+  async function compactFreelist(): Promise<boolean> {
+    try {
+      raw.exec('PRAGMA secure_delete = ON');
+      raw.exec('VACUUM');
+      if (!walCheckpointTruncate(raw)) return false;
+      return true;
+    } catch (e) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[sqlite] compactFreelist failed', e);
+      }
+      return false;
+    }
+  }
+
+  const tx: SqlDriver = { ...ops, compactFreelist, transaction: (fn) => fn(tx) };
 
   return {
     ...ops,
     raw,
     close: () => raw.close(),
+    compactFreelist,
     transaction<T>(fn: (t: SqlDriver) => Promise<T>): Promise<T> {
       const run = async () => {
         raw.exec('BEGIN IMMEDIATE');

@@ -6,6 +6,7 @@ import { fixedClock } from '@/shared/clock';
 import { MissingAssetError, StorageError } from '@/shared/errors';
 import { createIdGenerator } from '@/shared/id';
 
+import { plaintextFieldProtector } from './security/fieldProtector';
 import { migrate } from './db/migrate';
 import { createBetterSqliteDriver } from './db/testing/betterSqliteDriver';
 import { createMediaStore, type MediaBackend } from './media/store';
@@ -78,6 +79,7 @@ async function setup(sources: Record<string, string> = { 'pick://a': 'AAAA', 'pi
     deviceId: 'd',
     timeZone: () => 'Asia/Tokyo',
     scheduler: sm2b,
+    fields: plaintextFieldProtector,
   };
   const fake = fakeBackend(sources);
   const store = createMediaStore(fake.backend);

@@ -1,11 +1,12 @@
 import { Platform } from 'react-native';
-import type { SQLiteBindValue, SQLiteDatabase } from 'expo-sqlite';
+import { openDatabaseAsync, type SQLiteBindValue, type SQLiteDatabase } from 'expo-sqlite';
 
 import type { SqlDriver, SqlParam } from './driver';
+import { isWalCheckpointComplete, walCheckpointBusy } from './walCheckpoint';
 
 type Executor = Pick<SQLiteDatabase, 'execAsync' | 'runAsync' | 'getAllAsync' | 'getFirstAsync'>;
 
-function ops(x: Executor): Omit<SqlDriver, 'transaction'> {
+function ops(x: Executor): Omit<SqlDriver, 'transaction' | 'compactFreelist'> {
   const bind = (p: readonly SqlParam[]) => p as SQLiteBindValue[];
   return {
     exec: (sql) => x.execAsync(sql),
@@ -14,6 +15,27 @@ function ops(x: Executor): Omit<SqlDriver, 'transaction'> {
     get: async <T>(sql: string, params: readonly SqlParam[] = []) =>
       (await x.getFirstAsync<T>(sql, bind(params))) ?? null,
   };
+}
+
+function splitDatabasePath(databasePath: string): { name: string; directory?: string } {
+  if (databasePath === ':memory:') return { name: ':memory:' };
+  const slash = databasePath.lastIndexOf('/');
+  if (slash <= 0) return { name: databasePath };
+  return { name: databasePath.slice(slash + 1), directory: databasePath.slice(0, slash) };
+}
+
+/** VACUUM must run outside user transactions and without stale prepared statements on other handles. */
+async function compactOnConnection(conn: SQLiteDatabase): Promise<boolean> {
+  if (await conn.isInTransactionAsync()) {
+    await conn.execAsync('ROLLBACK');
+  }
+  await conn.execAsync('PRAGMA secure_delete = ON');
+  await conn.execAsync('VACUUM');
+  if (Platform.OS !== 'web') {
+    const row = await conn.getFirstAsync<{ busy: number }>('PRAGMA wal_checkpoint(TRUNCATE)');
+    if (!isWalCheckpointComplete(walCheckpointBusy(row))) return false;
+  }
+  return true;
 }
 
 /**
@@ -30,19 +52,67 @@ export function createExpoDriver(db: SQLiteDatabase): SqlDriver {
     return p;
   };
 
+  async function compactFreelist(): Promise<boolean> {
+    return serialize(async () => {
+      if (Platform.OS === 'web') {
+        try {
+          return await compactOnConnection(db);
+        } catch (e) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn('[sqlite] compactFreelist failed', e);
+          }
+          return false;
+        }
+      }
+
+      try {
+        const { name, directory } = splitDatabasePath(db.databasePath);
+        const maint = await openDatabaseAsync(name, { useNewConnection: true }, directory);
+        try {
+          const ok = await compactOnConnection(maint);
+          if (ok) return true;
+        } finally {
+          await maint.closeAsync();
+        }
+      } catch (first) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[sqlite] maint connection compact failed', first);
+        }
+      }
+
+      try {
+        return await compactOnConnection(db);
+      } catch (second) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[sqlite] compactFreelist failed', second);
+        }
+        return false;
+      }
+    });
+  }
+
   return {
     ...base,
+    compactFreelist,
     transaction<T>(fn: (tx: SqlDriver) => Promise<T>): Promise<T> {
       return serialize(async () => {
         let result: T | undefined;
         if (Platform.OS === 'web') {
-          const tx: SqlDriver = { ...base, transaction: (inner) => inner(tx) };
+          const tx: SqlDriver = {
+            ...base,
+            compactFreelist,
+            transaction: (inner) => inner(tx),
+          };
           await db.withTransactionAsync(async () => {
             result = await fn(tx);
           });
         } else {
           await db.withExclusiveTransactionAsync(async (txn) => {
-            const tx: SqlDriver = { ...ops(txn), transaction: (inner) => inner(tx) };
+            const tx: SqlDriver = {
+              ...ops(txn),
+              compactFreelist,
+              transaction: (inner) => inner(tx),
+            };
             result = await fn(tx);
           });
         }
