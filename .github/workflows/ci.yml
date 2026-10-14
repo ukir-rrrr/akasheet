@@ -20,6 +20,7 @@ jobs:
       # SDK 58 uses react-native 0.88.0-rc.x; npm strict peers reject reanimated until 0.88 stable.
       - run: npm ci
         env:
+          # Remove NPM_CONFIG_LEGACY_PEER_DEPS once RN 0.88 stable ships and peers resolve without it.
           NPM_CONFIG_LEGACY_PEER_DEPS: 'true'
       # secret scan + typecheck + lint + format check + Jest with coverage thresholds
       - run: npm run verify
