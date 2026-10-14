@@ -6,7 +6,14 @@ import type { FolderSummary } from '@/data/repos/folderRepo';
 import { flash, useFlash } from '@/features/app/flash';
 import { useFolders, useNextDue, useToday } from '@/features/app/queries';
 import { pushReview } from '@/features/review/reviewNavigation';
-import { CaptureDock } from '@/ui/Dock';
+import { BuildIdCaption } from '@/ui/BuildIdCaption';
+import {
+  CaptureDock,
+  buildIdCaptionBottom,
+  CAPTURE_DOCK_MIN_BOTTOM_PADDING,
+  folderListScrollPaddingBottom,
+  folderListToastBottom,
+} from '@/ui/Dock';
 import { formatCount, formatHeaderDate, formatRelativeDay, formatShortDate } from '@/ui/format';
 import {
   AppText,
@@ -138,7 +145,10 @@ export function FolderListScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 12, paddingBottom: (hasFolders ? 120 : 40) + insets.bottom },
+          {
+            paddingTop: insets.top + 12,
+            paddingBottom: folderListScrollPaddingBottom(insets.bottom, hasFolders),
+          },
         ]}
       >
         <View style={styles.headerRow}>
@@ -158,7 +168,20 @@ export function FolderListScreen() {
           onLibrary={() => actions.startCard('library')}
         />
       )}
-      <Toast spec={toast} onDone={flash.clear} bottom={hasFolders ? 100 + insets.bottom : 24} />
+      <View
+        style={[
+          styles.buildIdSlot,
+          {
+            bottom: hasFolders
+              ? buildIdCaptionBottom(insets.bottom)
+              : Math.max(insets.bottom, CAPTURE_DOCK_MIN_BOTTOM_PADDING) + 4,
+          },
+        ]}
+        pointerEvents="none"
+      >
+        <BuildIdCaption />
+      </View>
+      <Toast spec={toast} onDone={flash.clear} bottom={folderListToastBottom(insets.bottom, hasFolders)} />
     </View>
   );
 }
@@ -245,5 +268,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderStyle: 'dashed',
     borderRadius: radius.lg,
+  },
+  buildIdSlot: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
 });

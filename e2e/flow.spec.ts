@@ -79,6 +79,7 @@ test('create a folder and a masked card, then review it', async ({ page }) => {
   const shot = stepper(page, 'flow');
   await page.goto('/');
   await expect(page.getByTestId('create-first-folder')).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByTestId('build-id')).toHaveText(/^(unknown|[0-9a-f]{7})(\+dirty)? · v[\d.]+$/);
   await shot('empty-state');
 
   await createFolder(page, '日本史');
