@@ -83,7 +83,7 @@ test('create a folder and a masked card, then review it', async ({ page }) => {
   await expect(buildId).toHaveText(/^(unknown|[0-9a-f]{7})(\+dirty)? · v[\d.]+$/);
   await expect(buildId).toHaveAttribute(
     'aria-label',
-    /^ビルド (unknown|[0-9a-f]{7}) · v[\d.]+(（未コミットの変更あり）)?$/,
+    /^ビルド(不明| [0-9a-f]{7}) · v[\d.]+(（未コミットの変更あり）)?$/,
   );
   await shot('empty-state');
 

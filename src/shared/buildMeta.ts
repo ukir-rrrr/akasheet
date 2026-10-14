@@ -56,17 +56,30 @@ export function readBuildMeta(): BuildMeta {
   return { commitSha, dirty, version };
 }
 
+/** Shared `… · v{version}` line; `leading` is the SHA or Japanese build prefix segment. */
+function formatBuildVersionLine(leading: string, version: string): string {
+  return `${leading} · v${version}`;
+}
+
+function shaPartForCaption(meta: BuildMeta): string {
+  if (meta.dirty && meta.commitSha !== BUILD_ID_UNKNOWN) {
+    return `${meta.commitSha}+dirty`;
+  }
+  return meta.commitSha;
+}
+
+function leadingForAccessibility(meta: BuildMeta): string {
+  if (meta.commitSha === BUILD_ID_UNKNOWN) {
+    return 'ビルド不明';
+  }
+  return `ビルド ${meta.commitSha}`;
+}
+
 export function formatBuildCaption(meta: BuildMeta): string {
-  const shaPart =
-    meta.dirty && meta.commitSha !== BUILD_ID_UNKNOWN ? `${meta.commitSha}+dirty` : meta.commitSha;
-  return `${shaPart} · v${meta.version}`;
+  return formatBuildVersionLine(shaPartForCaption(meta), meta.version);
 }
 
 export function formatBuildAccessibilityLabel(meta: BuildMeta): string {
-  if (meta.commitSha === BUILD_ID_UNKNOWN) {
-    return `ビルド不明 · v${meta.version}`;
-  }
-  const caption = `${meta.commitSha} · v${meta.version}`;
   const dirtyNote = meta.dirty ? '（未コミットの変更あり）' : '';
-  return `ビルド ${caption}${dirtyNote}`;
+  return `${formatBuildVersionLine(leadingForAccessibility(meta), meta.version)}${dirtyNote}`;
 }

@@ -10,6 +10,7 @@ import Constants from 'expo-constants';
 
 import {
   BUILD_ID_UNKNOWN,
+  type BuildMeta,
   formatBuildAccessibilityLabel,
   formatBuildCaption,
   normalizeCommitSha,
@@ -74,6 +75,36 @@ describe('formatBuildAccessibilityLabel', () => {
     expect(formatBuildAccessibilityLabel({ commitSha: '1a2b3c4', dirty: true, version: '2.0.0' })).toBe(
       'ビルド 1a2b3c4 · v2.0.0（未コミットの変更あり）',
     );
+  });
+});
+
+describe('build caption and accessibility label', () => {
+  const cases: BuildMeta[] = [
+    { commitSha: '1a2b3c4', dirty: false, version: '1.0.0' },
+    { commitSha: '1a2b3c4', dirty: true, version: '2.0.0' },
+    { commitSha: BUILD_ID_UNKNOWN, dirty: false, version: '1.0.0' },
+    { commitSha: BUILD_ID_UNKNOWN, dirty: true, version: '3.1.4' },
+  ];
+
+  it('keeps the same · v{version} suffix on caption and label', () => {
+    for (const meta of cases) {
+      const caption = formatBuildCaption(meta);
+      const label = formatBuildAccessibilityLabel(meta);
+      const versionSuffix = ` · v${meta.version}`;
+      expect(caption.endsWith(versionSuffix)).toBe(true);
+      expect(label).toContain(versionSuffix);
+    }
+  });
+
+  it('matches golden strings for known, unknown, and dirty', () => {
+    expect(formatBuildCaption(cases[0])).toBe('1a2b3c4 · v1.0.0');
+    expect(formatBuildAccessibilityLabel(cases[0])).toBe('ビルド 1a2b3c4 · v1.0.0');
+    expect(formatBuildCaption(cases[1])).toBe('1a2b3c4+dirty · v2.0.0');
+    expect(formatBuildAccessibilityLabel(cases[1])).toBe('ビルド 1a2b3c4 · v2.0.0（未コミットの変更あり）');
+    expect(formatBuildCaption(cases[2])).toBe('unknown · v1.0.0');
+    expect(formatBuildAccessibilityLabel(cases[2])).toBe('ビルド不明 · v1.0.0');
+    expect(formatBuildCaption(cases[3])).toBe('unknown · v3.1.4');
+    expect(formatBuildAccessibilityLabel(cases[3])).toBe('ビルド不明 · v3.1.4（未コミットの変更あり）');
   });
 });
 
