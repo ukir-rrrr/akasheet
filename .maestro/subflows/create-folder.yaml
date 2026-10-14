@@ -1,12 +1,30 @@
-# Creates a folder; pass FOLDER_NAME via runFlow env.
+# Ensures a folder exists; pass FOLDER_NAME via runFlow env.
+# Uses create-first-folder (empty list) or add-folder (list already has items).
 ---
-- tapOn:
-    id: create-first-folder
-- tapOn:
-    id: prompt-input
-- inputText: ${FOLDER_NAME}
-- tapOn:
-    id: prompt-confirm
+- runFlow:
+    when:
+      notVisible:
+        id: folder-row-${FOLDER_NAME}
+    commands:
+      - runFlow:
+          when:
+            visible:
+              id: create-first-folder
+          commands:
+            - tapOn:
+                id: create-first-folder
+      - runFlow:
+          when:
+            visible:
+              id: add-folder
+          commands:
+            - tapOn:
+                id: add-folder
+      - tapOn:
+          id: prompt-input
+      - inputText: ${FOLDER_NAME}
+      - tapOn:
+          id: prompt-confirm
 - extendedWaitUntil:
     visible:
       id: folder-row-${FOLDER_NAME}

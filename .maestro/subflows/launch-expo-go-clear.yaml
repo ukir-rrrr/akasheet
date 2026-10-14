@@ -1,0 +1,17 @@
+# Launch Expo Go and clear app storage (00-launch empty-state checks).
+# Whether Expo Go actually wipes akasheet data via clearState is not verified on device; see README.
+---
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          appId: ${EXPO_GO_APP_ID_IOS}
+          clearState: true
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          appId: ${EXPO_GO_APP_ID_ANDROID}
+          clearState: true

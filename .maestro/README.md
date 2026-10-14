@@ -10,12 +10,20 @@
 
 ## appId（大文字小文字）
 
-| プラットフォーム | 値                  |
-| ---------------- | ------------------- |
-| iOS              | `host.exp.Exponent` |
-| Android          | `host.exp.exponent` |
+| プラットフォーム | 環境変数（`config.yaml` の `env:`） | 値                  |
+| ---------------- | ----------------------------------- | ------------------- |
+| iOS              | `EXPO_GO_APP_ID_IOS`                | `host.exp.Exponent` |
+| Android          | `EXPO_GO_APP_ID_ANDROID`            | `host.exp.exponent` |
 
-`subflows/open-expo-project.yaml` がプラットフォームごとに `launchApp` します。フロー先頭の `appId` は iOS 用の `${EXPO_GO_APP_ID_IOS}` です（Android 単体実行時は環境変数で上書き可能）。
+- `subflows/launch-expo-go.yaml` / `launch-expo-go-clear.yaml` がプラットフォームごとに上記を `launchApp` します。
+- 各フロー先頭の `appId:` は **`${EXPO_GO_APP_ID_IOS}`** を参照します（Maestro のフロー定義用）。**iOS で実行する場合**は `config.yaml` の既定値のままで問題ありません。
+- **Android だけ単体実行する場合**は、ヘッダの `appId` と `launchApp` の両方が正しい値になるよう、少なくとも次を上書きしてください（名前は Maestro の都合で iOS 用キーですが、Android のパッケージ名を入れます）:
+
+```bash
+export EXPO_GO_APP_ID_IOS=host.exp.exponent
+export EXPO_GO_APP_ID_ANDROID=host.exp.exponent
+maestro test .maestro/00-launch.yaml
+```
 
 ## Metro URL
 
@@ -26,6 +34,12 @@ export EXPO_DEV_SERVER_URL='exp://192.168.0.12:8081'
 # tunnel の例: exp://u.expo.dev/...
 maestro test .maestro/00-launch.yaml
 ```
+
+## フロー間の状態
+
+- 共通起動 `open-expo-project` は **フォルダ一覧ヘッダ**（`folder-list-menu`）の表示を待ちます。空状態でもフォルダ作成後でも、どのフローからでも起動できます。
+- `subflows/create-folder.yaml` は、一覧が空なら `create-first-folder`、既にフォルダがあるなら `add-folder` を使います。同名フォルダが既にある場合は作成をスキップします。
+- **`00-launch` だけ**は空状態を検証するため、`launch-expo-go-clear.yaml`（`clearState: true`）で Expo Go を起動します。**Expo Go 上で `clearState` が akasheet のローカルデータまで消すかは、本リポジトリでは実機未確認です。** 消えない端末では 2 回目の `00-launch` が失敗する可能性があります。
 
 ## フロー一覧
 
@@ -53,4 +67,4 @@ maestro test .maestro
 
 ## コールドスタート
 
-初回バンドルは最大約 120 秒待ちます（`extendedWaitUntil`）。Metro を止めたあとは `npx expo start -c` でキャッシュクリア再起動を検討してください。
+初回バンドルは最大約 120 秒待ちます（`connect-metro-akasheet` の `extendedWaitUntil`）。Metro を止めたあとは `npx expo start -c` でキャッシュクリア再起動を検討してください。
