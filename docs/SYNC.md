@@ -45,6 +45,7 @@ bundle.akasheet (zip)
 │   ├── masks.jsonl
 │   ├── media.jsonl        # メタのみ（path はエクスポート側の参照用、取り込みは sha256 で突合）
 │   ├── review_logs.jsonl
+│   ├── review_states.jsonl  # import スナップショットのみ（§2.3）。live 由来は載せない
 │   └── tombstones.jsonl   # 任意: 物理削除予定のメタ（GC 用、後述）
 └── media/
     └── <sha256>.bin       # 欠けている画像・サムネの平文 JPEG バイト（復号後）
@@ -81,7 +82,7 @@ bundle.akasheet (zip)
 }
 ```
 
-**第1段階（full のみ）**: 論理削除行も含め、マージに必要な全行＋参照される全 `review_logs`＋ live カードが参照する全 `media` ハッシュのファイルを同梱する。`manifest.mode` は常に `"full"`。
+**第1段階（full のみ）**: 論理削除行も含め、マージに必要な全行＋参照される全 `review_logs`＋ **`algorithm = IMPORTED_ALGORITHM` の `review_states` 行のみ**（Anki/CSV 取り込みカードのマージ replay 起点。§2.3）＋ live カードが参照する全 `media` ハッシュのファイルを同梱する。live スケジューラで再計算できる `review_states` は載せない。`manifest.mode` は常に `"full"`。
 
 **第2段階以降（未実装）**: `mode: "delta"` とローカル `sync_state.export_cursor`（端末ローカルの単調増加 **`change_seq`** — 取り込み適用を含む **ローカル DB への書き込みごとに +1**）により、`change_seq` がカーソルより大きい行だけ JSONL に載せる差分書き出しを検討する。`review_logs` は `(reviewed_at, id)` の副カーソルで補助。`updated_at` だけを境界にしない（他端末取り込み行は元の `updated_at` を保持するため、再送漏れや端末時計ずれで欠落する）。`included_log_ids` 等の重複検知フィールドも delta 向け。
 
@@ -90,6 +91,8 @@ bundle.akasheet (zip)
 DB 行を JSON オブジェクト1行に直列化する。機微フィールドは **エクスポート時に平文へ復号**して載せる（取り込み側で再 seal）。列名は DB に合わせる（例: `folder_id`, `deleted_at`）。
 
 `review_logs` は DB 列をそのまま export（`device_id` / `time_zone` 含む）。
+
+`review_states.jsonl` は **`algorithm = IMPORTED_ALGORITHM` の行だけ** export（`card_id` ごとに最大1行）。live 復習で得られる state は `review_logs` からマージ側で再生する。
 
 ### 画像の同梱
 
@@ -155,8 +158,12 @@ DB 行を JSON オブジェクト1行に直列化する。機微フィールド�
 
 1. `review_logs` の和集合をカードごとにマージ（§2.2）。
 2. 各 `card_id` で純関数 `replayReviewStateForMerge(...)` を実行:
-   - **import 由来スナップショット**: マージ後ログ集合に `algorithm = IMPORTED_ALGORITHM` の行が1件以上ある、またはマージ前ローカルに `review_states.algorithm = IMPORTED_ALGORITHM` がある場合、**起点 state** は `review_states` の当該行（import 適用後の最終 state）とする。`IMPORTED_ALGORITHM` のログは **起点の計算には使わない**（二重適用防止）。
-   - **live ログのみ再生**: 起点のあと、`algorithm ≠ IMPORTED_ALGORITHM` かつ `undone_at IS NULL` のログを `reviewed_at`, `id` 昇順で live スケジューラに適用（各ログの `time_zone` と `reviewRng(cardId, reviewed_at)`）。
+   - **import 由来カード**（マージ後ログ集合に `algorithm = IMPORTED_ALGORITHM` が1件以上ある、またはマージ前ローカル／バンドルに import 用 `review_states` がある）の **起点 state** は、次の **上から最初に満たす** ソースから取る（端末が Anki 取り込みを一度もしていなくても、バンドルだけで決まる）:
+     1. バンドル `rows/review_states.jsonl` の当該 `card_id` 行（`algorithm = IMPORTED_ALGORITHM`）
+     2. マージ前ローカル DB の `review_states` 当該行（`algorithm = IMPORTED_ALGORITHM`）
+     3. マージ後ログ集合のうち `algorithm = IMPORTED_ALGORITHM` かつ `undone_at IS NULL` を `reviewed_at`, `id` 昇順に並べ、**最終行の `new_*` 列**から `ReviewState` を組み立てる（`insertImportedReview` の最終 `review_states` と同値になる決定的規則。live スケジューラへの逐次適用はしない）
+     4. いずれも無い → マージプレビューで **エラー**（import 復習データが不完整）
+   - **live ログのみ再生**: 起点のあと、`algorithm ≠ IMPORTED_ALGORITHM` かつ `undone_at IS NULL` のログを `reviewed_at`, `id` 昇順で live スケジューラに適用（各ログの `time_zone` と `reviewRng(cardId, reviewed_at)`）。`IMPORTED_ALGORITHM` のログは **ここでは適用しない**（起点は上記スナップショット／`new_*` 復元のみ。二重適用防止）。
    - import 由来のないカードは従来どおり `scheduler.initial(card.created_at)` から全 live ログを再生。
 3. 得られた状態で `review_states` を **UPSERT**（`algorithm` は live スケジューラ ID。import のみのカードは `IMPORTED_ALGORITHM` を維持）。
 
@@ -164,8 +171,9 @@ DB 行を JSON オブジェクト1行に直列化する。機微フィールド�
 
 - `src/sync/merge/replay.ts`（および `reviewRepo.replay` 共通化）に上記分岐を実装。現行の「全ログを initial から再生」は **マージ経路では使わない**。
 - Jest: Anki 取り込み済みカード（`IMPORTED_ALGORITHM` + imported ログ）に、片方端末だけ live 復習ログを足してマージ → **取り込み由来の state 成分が live ログ未追加時と一致**し、live 分だけが上乗せされること。マージ前後で import のみのカードの `review_states` が不変であること。
+- Jest: **Anki 取り込み未実施の端末**が、取り込み済み端末の full バンドルだけを受け取る → `review_states.jsonl` または import ログ最終行 `new_*` から起点が決まり、replay が未定義にならないこと。
 
-取り込み専用の「最終 state だけ送る」フィールドは第1段階では載せない（ログが真実の源）。
+live 由来の `review_states` はバンドルに載せない（ログが真実の源）。import 由来だけ §1 の `review_states.jsonl` でスナップショットを同梱する。
 
 ### 2.4 衝突例
 
@@ -397,7 +405,7 @@ Expo Go では共有シート自動化が難しいため、**開発用バンド�
 - **ペアリング UX**: QR・短いコード・端末鍵などは **第2段階で別途設計**（本設計 PR では方式を固定しない）。
 - **`server_version`**: 行ごとに単調増加。クライアント LWW は「サーバー版優先 → updated_at → `id` 辞書順」。
 - **`sync_state`**: `import_peers` をサーバー上の `device_id` レジストリと同期。
-- **画像**: 初回はハッシュで参照。未所持バイナリだけ GET `/media/<sha256>`（サーバーはオブジェクトストア、**ユーザー自身の S3 互換を想定しない**なら Cursor ホスティングは採用しない — 運用コスト制約）。
+- **画像**: 初回はハッシュで参照。未所持バイナリだけ GET `/media/<sha256>`。バイナリ本体はサーバー側の **オブジェクトストア** に置く。**ユーザーが自前の S3 互換オブジェクトストレージを用意・運用する前提**（持ち込みストレージ）でない場合、運用者がストレージ代を常時負担するマネージドホスティング案は採用しない（§「運用コストゼロ」）。
 
 ### 8.2 採用しなかった案
 
