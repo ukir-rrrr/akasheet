@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { errorMessage } from '@/shared/errors';
 
 import { AppText, Button, Icon, PressableScale, type IconName } from './primitives';
+import { sheetActionAccessibilityLabel } from './sheetActionAccessibility';
 import { heights, radius, useTheme } from './theme';
 
 export type SheetAction<T> = {
@@ -129,18 +130,22 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 function SheetView({ req, onClose }: { req: SheetRequest; onClose: (v: unknown) => void }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
+  const menuLabel = req.title ?? 'メニュー';
   return (
-    <Pressable
-      style={[styles.backdrop, { backgroundColor: c.overlay }]}
-      onPress={() => onClose(null)}
-      accessibilityLabel="閉じる"
-    >
+    <View style={[styles.backdrop, { backgroundColor: c.overlay }]} accessibilityViewIsModal>
       <Pressable
+        style={StyleSheet.absoluteFill}
+        onPress={() => onClose(null)}
+        accessible={false}
+        importantForAccessibility="no"
+      />
+      <View
         style={[styles.sheet, { backgroundColor: c.surface, paddingBottom: insets.bottom + 12 }]}
-        onPress={() => undefined}
+        accessibilityRole="menu"
+        accessibilityLabel={menuLabel}
       >
         {(req.title || req.message) && (
-          <View style={styles.sheetHeader}>
+          <View style={styles.sheetHeader} accessible={false} importantForAccessibility="no-hide-descendants">
             {req.title && <AppText style={{ textAlign: 'center' }}>{req.title}</AppText>}
             {req.message && (
               <AppText variant="sub" color={c.ink3} style={{ textAlign: 'center', marginTop: 4 }}>
@@ -153,7 +158,8 @@ function SheetView({ req, onClose }: { req: SheetRequest; onClose: (v: unknown) 
           <PressableScale
             key={a.label}
             testID={a.testID}
-            accessibilityRole="button"
+            accessibilityRole="menuitem"
+            accessibilityLabel={sheetActionAccessibilityLabel(a)}
             onPress={() => onClose(a.value)}
             style={[styles.action, { borderTopColor: c.line }]}
           >
@@ -176,8 +182,8 @@ function SheetView({ req, onClose }: { req: SheetRequest; onClose: (v: unknown) 
           style={{ marginTop: 12 }}
           testID="dialog-cancel"
         />
-      </Pressable>
-    </Pressable>
+      </View>
+    </View>
   );
 }
 

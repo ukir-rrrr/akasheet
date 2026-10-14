@@ -1,0 +1,23 @@
+appId: host.exp.exponent
+---
+# Folder list ⋯ menu exposes import action in the a11y tree (testID tap, not text regex).
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: create-first-folder
+    timeout: 120000
+- tapOn:
+    id: create-first-folder
+- inputText: '英単語'
+- tapOn:
+    id: prompt-confirm
+- extendedWaitUntil:
+    visible:
+      id: folder-list-menu
+    timeout: 60000
+- tapOn:
+    id: folder-list-menu
+- assertVisible:
+    id: folder-list-menu-import
+- tapOn:
+    id: dialog-cancel

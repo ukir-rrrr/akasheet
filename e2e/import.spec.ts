@@ -14,7 +14,7 @@ async function importFile(page: Page, filePath: string) {
   await page.getByTestId('folder-list-menu').click();
   const [fileChooser] = await Promise.all([
     page.waitForEvent('filechooser'),
-    page.getByTestId('menu-import').click(),
+    page.getByTestId('folder-list-menu-import').click(),
   ]);
   await fileChooser.setFiles(filePath);
   await expect(page.getByTestId('import-preview-title')).toBeVisible({ timeout: 30_000 });

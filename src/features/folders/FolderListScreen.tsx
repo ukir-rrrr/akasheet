@@ -28,6 +28,7 @@ import {
   PressableScale,
   Skeleton,
 } from '@/ui/primitives';
+import { expoGoDevMenuReservePx } from '@/ui/headerInsets';
 import { heights, radius, space, useTheme } from '@/ui/theme';
 import { Toast } from '@/ui/Toast';
 
@@ -45,6 +46,7 @@ export function FolderListScreen() {
   const actions = useFolderActions();
   const startImport = useImportFlow();
   const toast = useFlash();
+  const devMenuReserve = expoGoDevMenuReservePx();
 
   const list = folders.data ?? [];
   const totalDue = list.reduce((n, f) => n + f.dueCount, 0);
@@ -154,7 +156,7 @@ export function FolderListScreen() {
           },
         ]}
       >
-        <View style={styles.headerRow}>
+        <View style={[styles.headerRow, devMenuReserve > 0 && { paddingRight: 4 + devMenuReserve }]}>
           <AppText variant="button" style={{ flex: 1 }}>
             akasheet
           </AppText>
