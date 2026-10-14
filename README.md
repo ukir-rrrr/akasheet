@@ -137,7 +137,7 @@ scripts/       サンプル画像の書き出し・秘密情報スキャンな�
 - React Native Skia（描画）、Gesture Handler、Reanimated
 - expo-sqlite、TanStack Query、zod
 
-SDK 58 は `react-native@0.88.0-rc` を使います。npm の semver では prerelease が `>=0.78` などの peer 範囲を満たさないため、`package.json` の `overrides` でルートの `react-native` を Skia・masked-view・Reanimated などに渡しています。RN 0.88 安定版で peer が自然に解決したら overrides を外せます。
+SDK 58 は `react-native@0.88.0-rc` を使います。npm の semver では prerelease が `>=0.78` や `0.86 - 0.88` などの peer 範囲を満たさないため、`package.json` の `overrides` でルートの `react-native` を Skia・masked-view・Reanimated・Worklets などに渡しています。`npm run check:rn-peers` で漏れを検出できます。RN 0.88 安定版で peer が自然に解決したら overrides を外せます。
 
 ## 素材と著作権について
 
