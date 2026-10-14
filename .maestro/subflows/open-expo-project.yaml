@@ -1,0 +1,31 @@
+# Opens akasheet inside Expo Go 58 via Metro deep link (cold bundle may take up to 2 minutes).
+---
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          appId: ${EXPO_GO_APP_ID_IOS}
+          clearState: false
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          appId: ${EXPO_GO_APP_ID_ANDROID}
+          clearState: false
+- openLink: ${EXPO_DEV_SERVER_URL}
+- runFlow:
+    when:
+      visible: Open
+    commands:
+      - tapOn: Open
+- runFlow:
+    when:
+      visible: 'Open in "Expo Go"'
+    commands:
+      - tapOn: Open
+- extendedWaitUntil:
+    visible:
+      id: create-first-folder
+    timeout: 120000

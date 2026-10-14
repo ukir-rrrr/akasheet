@@ -1,0 +1,25 @@
+appId: ${EXPO_GO_APP_ID_IOS}
+tags:
+  - smoke
+---
+- runFlow: subflows/open-expo-project.yaml
+- runFlow:
+    file: subflows/create-folder.yaml
+    env:
+      FOLDER_NAME: 日本史
+- tapOn:
+    id: folder-row-日本史
+- tapOn:
+    id: folder-try-sample
+- extendedWaitUntil:
+    visible:
+      id: editor-canvas
+    timeout: 60000
+- assertVisible:
+    id: mask-count
+- tapOn:
+    id: editor-folder
+- assertVisible:
+    id: dialog-cancel
+- tapOn:
+    id: dialog-cancel

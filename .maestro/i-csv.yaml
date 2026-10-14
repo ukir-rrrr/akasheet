@@ -1,0 +1,20 @@
+appId: ${EXPO_GO_APP_ID_IOS}
+tags:
+  - import
+  - device-limitation
+---
+# CSV zip import (Playwright: e2e/fixtures/generated/e2e-csv-import.zip).
+# On physical iOS, Maestro cannot inject a file into the system Document Picker browse UI;
+# this flow verifies the in-app import entry point only. Use Playwright for full import E2E.
+- runFlow: subflows/open-expo-project.yaml
+- extendedWaitUntil:
+    visible:
+      id: folder-list-menu
+    timeout: 120000
+- tapOn:
+    id: folder-list-menu
+- assertVisible:
+    id: folder-list-menu-import
+- tapOn:
+    id: folder-list-menu-import
+# Document Picker opens here — manual fixture or future harness required to reach import-preview-title.

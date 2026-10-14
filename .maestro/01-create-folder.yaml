@@ -1,0 +1,11 @@
+appId: ${EXPO_GO_APP_ID_IOS}
+tags:
+  - smoke
+---
+- runFlow: subflows/open-expo-project.yaml
+- runFlow:
+    file: subflows/create-folder.yaml
+    env:
+      FOLDER_NAME: 日本史
+- assertVisible:
+    id: folder-row-日本史

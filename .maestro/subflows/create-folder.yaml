@@ -1,0 +1,13 @@
+# Creates a folder; pass FOLDER_NAME via runFlow env.
+---
+- tapOn:
+    id: create-first-folder
+- tapOn:
+    id: prompt-input
+- inputText: ${FOLDER_NAME}
+- tapOn:
+    id: prompt-confirm
+- extendedWaitUntil:
+    visible:
+      id: folder-row-${FOLDER_NAME}
+    timeout: 60000

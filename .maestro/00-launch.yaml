@@ -1,0 +1,10 @@
+appId: ${EXPO_GO_APP_ID_IOS}
+tags:
+  - smoke
+---
+# Cold launch via Expo Go deep link; empty folder list is ready.
+- runFlow: subflows/open-expo-project.yaml
+- assertVisible:
+    id: create-first-folder
+- assertVisible:
+    id: build-id

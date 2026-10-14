@@ -1,0 +1,35 @@
+appId: ${EXPO_GO_APP_ID_IOS}
+tags:
+  - smoke
+---
+- runFlow: subflows/seed-card-for-review.yaml
+- tapOn:
+    id: start-review
+- extendedWaitUntil:
+    visible:
+      id: mask-number-1
+    timeout: 60000
+- tapOn:
+    id: reveal-next
+- tapOn:
+    id: reveal-next
+- tapOn:
+    id: reveal-next
+- tapOn:
+    id: answer-again
+- assertVisible:
+    id: toast
+- extendedWaitUntil:
+    visible:
+      id: review-progress
+    timeout: 60000
+- tapOn:
+    id: reveal-next
+- tapOn:
+    id: reveal-next
+- tapOn:
+    id: reveal-next
+- tapOn:
+    id: answer-good
+- assertVisible:
+    id: review-wrapping-up

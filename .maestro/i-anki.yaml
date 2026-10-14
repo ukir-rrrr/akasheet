@@ -1,0 +1,19 @@
+appId: ${EXPO_GO_APP_ID_IOS}
+tags:
+  - import
+  - device-limitation
+---
+# Anki .apkg import (Playwright: e2e/fixtures/generated/e2e-anki-import.apkg).
+# Same Document Picker limitation as i-csv.yaml on device; Playwright covers end-to-end import.
+- runFlow: subflows/open-expo-project.yaml
+- extendedWaitUntil:
+    visible:
+      id: folder-list-menu
+    timeout: 120000
+- tapOn:
+    id: folder-list-menu
+- assertVisible:
+    id: folder-list-menu-import
+- tapOn:
+    id: folder-list-menu-import
+# Stops at system file picker — see .maestro/README.md.

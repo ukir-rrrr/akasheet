@@ -1,0 +1,39 @@
+appId: ${EXPO_GO_APP_ID_IOS}
+tags:
+  - smoke
+---
+- runFlow: subflows/open-expo-project.yaml
+- runFlow:
+    file: subflows/create-folder.yaml
+    env:
+      FOLDER_NAME: 日本史
+- tapOn:
+    id: folder-row-日本史
+- tapOn:
+    id: folder-try-sample
+- extendedWaitUntil:
+    visible:
+      id: editor-canvas
+    timeout: 60000
+- swipe:
+    start: 20%, 28%
+    end: 55%, 28%
+    duration: 700
+- swipe:
+    start: 22%, 42%
+    end: 62%, 42%
+    duration: 700
+- tapOn:
+    id: tool-rect
+- swipe:
+    start: 45%, 58%
+    end: 72%, 68%
+    duration: 700
+- tapOn:
+    id: editor-save
+- extendedWaitUntil:
+    visible:
+      id: card-thumb
+    timeout: 60000
+- assertVisible:
+    id: toast
